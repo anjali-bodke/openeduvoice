@@ -1,0 +1,14 @@
+# GUI + general
+tqdm
+colorama
+requests
+
+# PPTX + audio IO
+python-pptx
+pydub
+ffmpeg-python
+
+# Utilities
+numpy
+scipy
+soundfile
