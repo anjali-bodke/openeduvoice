@@ -1,0 +1,57 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+.env/
+
+# =========================
+# OS / IDE
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# Project runtime output
+# =========================
+*_transcript/
+logs/
+temp/
+output/
+cache/
+
+# Audio / media artifacts
+*.wav
+*.mp3
+*.m4a
+*.flac
+
+# PowerPoint temp files
+*.pptx~
+
+# =========================
+# Models (must NEVER be committed)
+# =========================
+models/
+assets/models/
+hf_cache/
+torch_cache/
+
+# =========================
+# Build artifacts (future)
+# =========================
+build/
+dist/
+*.spec
