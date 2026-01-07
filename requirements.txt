@@ -4,6 +4,7 @@ colorama
 requests
 
 # PPTX + audio IO
+faster-whisper
 python-pptx
 pydub
 ffmpeg-python
