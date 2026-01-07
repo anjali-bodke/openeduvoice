@@ -1,5 +1,9 @@
 # OpenEduVoice
 
+<p align="center">
+  <img src="assets/logo.png" alt="Project Logo" width="200"/>
+</p>
+
 An **offline Windows desktop application** that automates **audio extraction, transcription, translation, text-to-speech (TTS), and reintegration** for PowerPoint (`.pptx`) files.  
 Designed for **educational use** and **non-technical users**.
 
