@@ -11,7 +11,7 @@ from typing import Callable, List
 
 from pydub import AudioSegment
 
-from pptx_linguistic_tool.utils.logging_utils import safe_log
+from OpenEduVoice.utils.logging_utils import safe_log
 
 SUPPORTED_INPUT_SUFFIXES = (".mp3", ".aac", ".wma", ".m4a", ".wav")
 

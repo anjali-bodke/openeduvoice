@@ -13,20 +13,20 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 # Core pipeline modules
-from pptx_linguistic_tool.core.extraction.slide_text_extractor import (
+from OpenEduVoice.core.extraction.slide_text_extractor import (
     extract_audio_from_pptx,
     extract_slide_text,
 )
-from pptx_linguistic_tool.core.audio.transcriber import transcribe_audio_files
-from pptx_linguistic_tool.core.translation.translator_interface import (
+from OpenEduVoice.core.audio.transcriber import transcribe_audio_files
+from OpenEduVoice.core.translation.translator_interface import (
     translate_transcript_files,
     translate_text_files,
 )
-from pptx_linguistic_tool.core.audio.tts_generator import text_to_speech
-from pptx_linguistic_tool.core.audio.audio_converter import convert_audio_to_wav
-from pptx_linguistic_tool.core.reintegration.reintegrator_all import reintegrate_text_and_audio
-from pptx_linguistic_tool.utils.logging_utils import safe_log
-from pptx_linguistic_tool.config.constants import (
+from OpenEduVoice.core.audio.tts_generator import text_to_speech
+from OpenEduVoice.core.audio.audio_converter import convert_audio_to_wav
+from OpenEduVoice.core.reintegration.reintegrator_all import reintegrate_text_and_audio
+from OpenEduVoice.utils.logging_utils import safe_log
+from OpenEduVoice.config.constants import (
     TTS_LANGUAGE_MODEL_MAP,
     AUTO_DEADBAND_SEC,
     AUTO_DEADBAND_RATIO,
@@ -295,7 +295,7 @@ class App:
             try:
                 input_dir = self.get_subdir("converted_wav")
                 output_dir = self.get_subdir("transcripts")
-                transcribed = transcribe_audio_files(input_dir, output_dir)
+                transcribed = transcribe_audio_files(input_dir, output_dir, log_fn=self.log_and_output)
                 self.log_and_output(f"{len(transcribed)} files transcribed and saved in: {output_dir}")
                 self.increment_progress()
             except Exception as e:

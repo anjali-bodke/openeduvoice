@@ -11,21 +11,20 @@ driven by the detected synthesized vs original durations and deadband/clamp sett
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-from TTS.api import TTS
 from pydub import AudioSegment
 
-from pptx_linguistic_tool.config.constants import (
+from OpenEduVoice.config.constants import (
     TTS_BITRATE,
     TTS_CHUNK_PAUSE_MS,
     TTS_FADE_MS,
 )
 
-from pptx_linguistic_tool.utils.preprocessing import (
+from OpenEduVoice.utils.preprocessing import (
     minimal_clean,
     chunk_by_punctuation as split_by_punctuation,
     sanitize_for_tts,
 )
-from pptx_linguistic_tool.utils.ffmpeg_utils import (
+from OpenEduVoice.utils.ffmpeg_utils import (
     apply_atempo,
     probe_duration_seconds,
     FFmpegNotFound,  # ensure this exists in ffmpeg_utils
@@ -132,6 +131,15 @@ def text_to_speech(
     Returns:
         List[Path]: Paths to generated .m4a files.
     """
+
+    try:
+        from TTS.api import TTS  # lazy import
+    except Exception as e:
+        raise RuntimeError(
+            "TTS is not available in this build. "
+            "Please install/run the full version with TTS support."
+        ) from e
+
     # Decide model based on dropdown (tts_lang) if provided
     if tts_lang and tts_lang in model_map:
         lang_key = tts_lang

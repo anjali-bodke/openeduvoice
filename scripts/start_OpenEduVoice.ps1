@@ -13,7 +13,7 @@ try {
   & $venvActivate
 
   # Install only if module isn't importable in this venv
-  $installed = python -c "import importlib.util; print('1' if importlib.util.find_spec('pptx_linguistic_tool') else '0')"
+  $installed = python -c "import importlib.util; print('1' if importlib.util.find_spec('OpenEduVoice') else '0')"
   if ($installed -ne "1") {
     Write-Host "[Setup] Installing OpenEduVoice (editable)..." -ForegroundColor Cyan
     python -m pip install --upgrade pip setuptools wheel
@@ -21,7 +21,7 @@ try {
     Write-Host "[Setup] Done." -ForegroundColor Green
   }
 
-  python -m pptx_linguistic_tool
+  python -m OpenEduVoice
 }
 catch {
   Write-Host "[Error] OpenEduVoice failed to start." -ForegroundColor Red
