@@ -1,4 +1,4 @@
-# PPTX Linguistic Tool
+# OpenEduVoice
 
 An **offline Windows desktop application** that automates **audio extraction, transcription, translation, text-to-speech (TTS), and reintegration** for PowerPoint (`.pptx`) files.  
 Designed for **educational use** and **non-technical users**.
@@ -7,7 +7,7 @@ Designed for **educational use** and **non-technical users**.
 
 ## Overview
 
-The **PPTX Linguistic Tool** enables multilingual transformation of PowerPoint presentations by:
+The **OpenEduVoice** enables multilingual transformation of PowerPoint presentations by:
 
 - Extracting embedded audio and slide text
 - Transcribing spoken content using Whisper
