@@ -47,6 +47,7 @@ class App:
         self.pptx_path = tk.StringVar()
         self.language = tk.StringVar(value="English")
         self.translation_direction = tk.StringVar(value="German to English")
+        self.acknowledge_var = tk.BooleanVar(value=False)
 
         self.language_model_map = TTS_LANGUAGE_MODEL_MAP.copy()
 
@@ -202,8 +203,34 @@ class App:
         # 4. Control buttons
         control_frame = tk.Frame(self.root)
         control_frame.pack(fill="x", padx=10, pady=10)
-        tk.Button(control_frame, text="Run Selected Steps", command=self.run_selected_steps, font=default_font).pack(side="left", padx=5)
-        tk.Button(control_frame, text="Exit", command=self.root.quit, font=default_font).pack(side="left", padx=5)
+
+        tk.Button(
+            control_frame,
+            text="Run Selected Steps",
+            command=self.run_selected_steps,
+            font=default_font,
+        ).pack(side="left", padx=5)
+
+        ack_text = (
+            "I understand this software uses AI tools/technology for translation. "
+            "After all steps are completed, I will manually verify all slides before intended use."
+        )
+
+        tk.Checkbutton(
+            control_frame,
+            text=ack_text,
+            variable=self.acknowledge_var,
+            font=default_font,
+            wraplength=430,   # keeps it readable next to the button
+            justify="left",
+        ).pack(side="left", padx=10)
+
+        tk.Button(
+            control_frame,
+            text="Exit",
+            command=self.root.quit,
+            font=default_font,
+        ).pack(side="left", padx=5)
 
         # 5. Progress bar
         progress_frame = tk.LabelFrame(self.root, text="4. Progress", font=default_font)
@@ -234,6 +261,12 @@ class App:
     # ====== Run Steps ======
 
     def run_selected_steps(self):
+        
+        # Must acknowledge disclaimer before running
+        if not getattr(self, "acknowledge_var", tk.BooleanVar(value=False)).get():
+            self.log_and_output("[WARN] Please confirm the acknowledgement checkbox before running any steps.")
+            return
+        
         self.progress_bar["value"] = 0
         selected_steps = [(name, method) for name, (var, method) in self.steps_vars.items() if var.get()]
         total = max(1, len(selected_steps))
