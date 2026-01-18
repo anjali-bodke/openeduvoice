@@ -13,15 +13,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, List
 
-from OpenEduVoice.utils.logging_utils import safe_log
-from OpenEduVoice.utils.preprocessing import segment_sentences
-from OpenEduVoice.core.translation.nllb_model import NLLBTranslator  # type: ignore
+from utils.logging_utils import safe_log
+from utils.preprocessing import segment_sentences
+from core.translation.nllb_model import NLLBTranslator  # type: ignore
 
 # ---- Optional glossary cleanup (can be disabled) ----
 GLOSSARY_ON = True  # set to False to disable glossary-based cleanup
 
 try:
-    from OpenEduVoice.utils.cleanup import (
+    from utils.cleanup import (
         apply_glossary_cleanup_to_lines,
         apply_glossary_cleanup_with_source,
     )

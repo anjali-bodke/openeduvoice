@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from OpenEduVoice.utils.logging_utils import safe_log
+from utils.logging_utils import safe_log
 
 DEFAULT_WHISPER_MODEL = "medium"
 UNSAFE_LARGE_MODELS = {"large", "large-v2"}

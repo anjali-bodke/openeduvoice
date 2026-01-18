@@ -13,20 +13,20 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 # Core pipeline modules
-from OpenEduVoice.core.extraction.slide_text_extractor import (
+from core.extraction.slide_text_extractor import (
     extract_audio_from_pptx,
     extract_slide_text,
 )
-from OpenEduVoice.core.audio.transcriber import transcribe_audio_files
-from OpenEduVoice.core.translation.translator_interface import (
+from core.audio.transcriber import transcribe_audio_files
+from core.translation.translator_interface import (
     translate_transcript_files,
     translate_text_files,
 )
-from OpenEduVoice.core.audio.tts_generator import text_to_speech
-from OpenEduVoice.core.audio.audio_converter import convert_audio_to_wav
-from OpenEduVoice.core.reintegration.reintegrator_all import reintegrate_text_and_audio
-from OpenEduVoice.utils.logging_utils import safe_log
-from OpenEduVoice.config.constants import (
+from core.audio.tts_generator import text_to_speech
+from core.audio.audio_converter import convert_audio_to_wav
+from core.reintegration.reintegrator_all import reintegrate_text_and_audio
+from utils.logging_utils import safe_log
+from config.constants import (
     TTS_LANGUAGE_MODEL_MAP,
     AUTO_DEADBAND_SEC,
     AUTO_DEADBAND_RATIO,

@@ -13,18 +13,18 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from pydub import AudioSegment
 
-from OpenEduVoice.config.constants import (
+from config.constants import (
     TTS_BITRATE,
     TTS_CHUNK_PAUSE_MS,
     TTS_FADE_MS,
 )
 
-from OpenEduVoice.utils.preprocessing import (
+from utils.preprocessing import (
     minimal_clean,
     chunk_by_punctuation as split_by_punctuation,
     sanitize_for_tts,
 )
-from OpenEduVoice.utils.ffmpeg_utils import (
+from utils.ffmpeg_utils import (
     apply_atempo,
     probe_duration_seconds,
     FFmpegNotFound,  # ensure this exists in ffmpeg_utils
