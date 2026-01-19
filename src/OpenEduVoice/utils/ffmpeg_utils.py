@@ -1,4 +1,3 @@
-# src/utils/ffmpeg_utils.py
 from __future__ import annotations
 
 import shutil

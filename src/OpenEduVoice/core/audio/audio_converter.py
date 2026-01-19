@@ -1,4 +1,3 @@
-# src/core/audio/audio_converter.py
 """
 Converts extracted audio files from various formats to standardized .wav
 using pydub (FFmpeg backend). Logs are consistent and never raise.
@@ -11,7 +10,7 @@ from typing import Callable, List
 
 from pydub import AudioSegment
 
-from utils.logging_utils import safe_log
+from OpenEduVoice.utils.logging_utils import safe_log
 
 SUPPORTED_INPUT_SUFFIXES = (".mp3", ".aac", ".wma", ".m4a", ".wav")
 

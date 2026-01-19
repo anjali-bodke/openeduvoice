@@ -1,4 +1,3 @@
-# src/core/audio/transcriber.py
 """
 Handles audio transcription using faster-whisper.
 - Safe CUDA path patching on Windows virtualenvs with pip `nvidia/*` packages.
@@ -13,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from utils.logging_utils import safe_log
+from OpenEduVoice.utils.logging_utils import safe_log
 
 DEFAULT_WHISPER_MODEL = "medium"
 UNSAFE_LARGE_MODELS = {"large", "large-v2"}

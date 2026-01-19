@@ -1,4 +1,3 @@
-# src/core/audio/tts_generator.py
 """
 Generates TTS audio from text files using Coqui TTS, and converts output to .m4a format.
 Supports pitch-preserving tempo adjustment via FFmpeg's `atempo` filter.
@@ -13,18 +12,18 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from pydub import AudioSegment
 
-from config.constants import (
+from OpenEduVoice.config.constants import (
     TTS_BITRATE,
     TTS_CHUNK_PAUSE_MS,
     TTS_FADE_MS,
 )
 
-from utils.preprocessing import (
+from OpenEduVoice.utils.preprocessing import (
     minimal_clean,
     chunk_by_punctuation as split_by_punctuation,
     sanitize_for_tts,
 )
-from utils.ffmpeg_utils import (
+from OpenEduVoice.utils.ffmpeg_utils import (
     apply_atempo,
     probe_duration_seconds,
     FFmpegNotFound,  # ensure this exists in ffmpeg_utils

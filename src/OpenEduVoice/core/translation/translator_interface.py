@@ -1,4 +1,3 @@
-# src/core/translation/translator_interface.py
 """
 Translation interfaces for slide text (line-aligned) and transcripts (full text).
 Backed by NLLB-200 via src.core.translation.nllb_model.NLLBTranslator.
@@ -13,9 +12,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, List
 
-from utils.logging_utils import safe_log
-from utils.preprocessing import segment_sentences
-from core.translation.nllb_model import NLLBTranslator  # type: ignore
+from OpenEduVoice.utils.logging_utils import safe_log
+from OpenEduVoice.utils.preprocessing import segment_sentences
+from OpenEduVoice.core.translation.nllb_model import NLLBTranslator 
 
 # ---- Optional glossary cleanup (can be disabled) ----
 GLOSSARY_ON = True  # set to False to disable glossary-based cleanup
