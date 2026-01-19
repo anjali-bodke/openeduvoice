@@ -22,6 +22,52 @@ try:
 except Exception:  # pragma: no cover
     WhisperModel = None  # allow tests to monkeypatch
 
+def _cuda_wheels_present() -> bool:
+    """
+    Returns True if pip-installed NVIDIA CUDA wheel DLL dirs exist in this venv.
+    On Windows this is a strong signal that cublas/cudnn DLLs can actually be loaded.
+    """
+    if os.name != "nt":
+        return False
+
+    try:
+        venv_base = Path(sys.executable).parent.parent
+        nvidia_path = venv_base / "Lib" / "site-packages" / "nvidia"
+        candidates = [
+            nvidia_path / "cuda_runtime" / "bin",
+            nvidia_path / "cublas" / "bin",
+            nvidia_path / "cudnn" / "bin",
+        ]
+        return any(p.exists() for p in candidates)
+    except Exception:
+        return False
+
+
+def _torch_cuda_available() -> bool:
+    """
+    Returns True only when torch reports CUDA is available.
+    Works safely for CPU-only torch builds (returns False).
+    """
+    try:
+        import torch  # local import to avoid hard dependency issues in edge cases
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+def _select_device_and_compute(model_name: str) -> tuple[str, str]:
+    """
+    CPU-first default. Only use CUDA when BOTH:
+      - torch says CUDA is available, AND
+      - CUDA wheel DLL folders exist in this venv (Windows)
+    """
+    cuda_ok = _torch_cuda_available() and _cuda_wheels_present()
+    if cuda_ok:
+        # On CUDA, float16 is usually the right default for speed.
+        return "cuda", "float16"
+
+    # CPU fallback. int8 is typically fastest/most memory-friendly on CPU.
+    return "cpu", "int8"
 
 def set_cuda_paths(log_fn: Optional[Callable[[str], None]] = None) -> None:
     """
@@ -56,74 +102,73 @@ def set_cuda_paths(log_fn: Optional[Callable[[str], None]] = None) -> None:
     except Exception as e:
         safe_log(log_fn, f"[WARN] set_cuda_paths failed (continuing without): {e}")
 
-
 def _init_model(model_size: str, log_fn: Optional[Callable[[str], None]]) -> "WhisperModel":
     """
     Initialize WhisperModel with:
-    - Automatic device choice (try CUDA, then CPU).
+    - Deterministic device selection:
+        * Use CUDA only if torch reports CUDA available AND CUDA wheel DLLs exist (Windows).
+        * Otherwise use CPU.
     - Safety guard: never run large/large-v2 on CUDA (fallback to DEFAULT_WHISPER_MODEL).
-    - Graceful fallbacks for compute_type per device.
+    - Graceful fallbacks for compute_type on the chosen device.
     """
     if WhisperModel is None:
         raise RuntimeError("faster-whisper is not installed or failed to import.")
 
-    # What the user/config requested
     requested_model = model_size or DEFAULT_WHISPER_MODEL
+
+    # Decide device once (do not "try cuda first" on CPU-only machines)
+    device, preferred_compute = _select_device_and_compute(requested_model)
+
+    # Apply large-model guard only for CUDA
+    effective_model = requested_model
+    if device == "cuda" and requested_model in UNSAFE_LARGE_MODELS:
+        safe_log(
+            log_fn,
+            (
+                f"[WARN] Whisper model '{requested_model}' on CUDA has been unstable "
+                f"on this setup. Overriding to '{DEFAULT_WHISPER_MODEL}' for reliability."
+            ),
+        )
+        effective_model = DEFAULT_WHISPER_MODEL
+
+    # Only patch CUDA paths when we actually intend to use CUDA
+    if device == "cuda":
+        set_cuda_paths(log_fn)
+
+    # Compute-type fallback sequence
+    if device == "cuda":
+        compute_candidates = [preferred_compute, "float32", "int8"]
+    else:
+        compute_candidates = [preferred_compute, "float32"]
 
     last_err: Optional[Exception] = None
 
-    # Try CUDA first (fast), then CPU as fallback
-    device_candidates = ["cuda", "cpu"]
-
-    for device in device_candidates:
-        # Pick the effective model name for this device
-        effective_model = requested_model
-
-        # Guard: large models on CUDA have been unstable → override to DEFAULT_WHISPER_MODEL
-        if device == "cuda" and requested_model in UNSAFE_LARGE_MODELS:
+    for compute_type in compute_candidates:
+        # De-dupe in case preferred_compute == "float32" etc.
+        if compute_candidates.count(compute_type) > 1:
+            # We'll let duplicates slide, it's harmless; but you can de-dupe if you want.
+            pass
+        try:
             safe_log(
                 log_fn,
-                (
-                    f"[WARN] Whisper model '{requested_model}' on CUDA has been unstable "
-                    f"on this setup. Overriding to '{DEFAULT_WHISPER_MODEL}' for reliability."
-                ),
+                f"[INFO] Loading faster-whisper model '{effective_model}' "
+                f"on device '{device}' (compute_type={compute_type})",
             )
-            effective_model = DEFAULT_WHISPER_MODEL
+            model = WhisperModel(effective_model, device=device, compute_type=compute_type)
+            return model
+        except Exception as e:
+            last_err = e
+            safe_log(
+                log_fn,
+                "[WARN] Model init failed with "
+                f"device={device}, compute_type={compute_type}, "
+                f"model='{effective_model}': {e}",
+            )
 
-        # Compute-type candidates per device
-        if device == "cuda":
-            compute_candidates = ["float16", "float32", "int8"]
-        else:
-            compute_candidates = ["int8", "float32"]
-
-        for compute_type in compute_candidates:
-            try:
-                safe_log(
-                    log_fn,
-                    f"[INFO] Loading faster-whisper model '{effective_model}' "
-                    f"on device '{device}' (compute_type={compute_type})",
-                )
-                model = WhisperModel(
-                    effective_model,
-                    device=device,
-                    compute_type=compute_type,
-                )
-                return model
-            except Exception as e:
-                last_err = e
-                safe_log(
-                    log_fn,
-                    "[WARN] Model init failed with "
-                    f"device={device}, compute_type={compute_type}, "
-                    f"model='{effective_model}': {e}",
-                )
-
-    # If we reach here, all attempts failed
     raise RuntimeError(
         f"Failed to initialize faster-whisper model '{requested_model}' "
-        f"on any device: {last_err}"
+        f"on device '{device}': {last_err}"
     )
-
 
 def transcribe_audio_files(
     audio_dir: Path,
@@ -144,7 +189,10 @@ def transcribe_audio_files(
         List of saved .txt file paths.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    set_cuda_paths(log_fn)
+    
+    # Only patch CUDA paths if CUDA wheels exist (prevents misleading logs in CPU mode)
+    if _cuda_wheels_present() and _torch_cuda_available():
+        set_cuda_paths(log_fn)
 
     try:
         model = _init_model(model_size, log_fn)
