@@ -20,7 +20,7 @@ from OpenEduVoice.core.translation.nllb_model import NLLBTranslator
 GLOSSARY_ON = True  # set to False to disable glossary-based cleanup
 
 try:
-    from utils.cleanup import (
+    from OpenEduVoice.utils.cleanup import (
         apply_glossary_cleanup_to_lines,
         apply_glossary_cleanup_with_source,
     )
