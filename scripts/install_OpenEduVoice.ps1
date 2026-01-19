@@ -1,3 +1,8 @@
+param(
+  [ValidateSet("cpu","cuda")]
+  [string]$Accel = "cpu"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -28,7 +33,6 @@ function Ensure-Tls12() {
 }
 
 function Ensure-Python311() {
-  # Python is a prerequisite (Option B), but we still validate clearly.
   if (-not (Test-Command "python")) {
     throw "Python not found on PATH. Install Python 3.11 and ensure it's added to PATH."
   }
@@ -55,8 +59,6 @@ function VenvPython() {
 }
 
 function Ensure-FFmpegLocal() {
-  # If ffmpeg is already on PATH we still bundle locally (optional).
-  # We only bundle if local bin is missing.
   $ffmpegExe = Join-Path $FfmpegBin "ffmpeg.exe"
   $ffprobeExe = Join-Path $FfmpegBin "ffprobe.exe"
 
@@ -97,7 +99,6 @@ function Ensure-FFmpegLocal() {
   Copy-Item -Force $foundFfprobe.FullName $ffprobeExe
 
   Remove-Item -Recurse -Force $tmpExtract
-
   Info "Local FFmpeg ready: $FfmpegBin"
 }
 
@@ -105,6 +106,38 @@ function Ensure-RequirementsFiles() {
   foreach ($f in @($ReqCore, $ReqML, $ReqTTS, $PyProj)) {
     if (-not (Test-Path $f)) { throw "Missing required file: $f" }
   }
+}
+
+function Remove-CudaWheels([string]$py) {
+  Info "Ensuring CPU mode: removing CUDA runtime wheels if present..."
+  $pkgs = @("nvidia-cuda-runtime-cu12","nvidia-cublas-cu12","nvidia-cudnn-cu12")
+  foreach ($p in $pkgs) {
+    try {
+      & $py -m pip uninstall -y $p | Out-Null
+    } catch {}
+  }
+}
+
+function Install-CudaWheels([string]$py) {
+  Info "Installing CUDA runtime wheels (only for CUDA mode)..."
+  & $py -m pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12
+}
+
+function Force-InstallTorch([string]$py, [string]$mode) {
+  # We force torch install AFTER requirements to end up in a consistent state.
+  if ($mode -eq "cpu") {
+    Info "Forcing CPU PyTorch from official CPU index..."
+    & $py -m pip install --upgrade --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+  } else {
+    # NOTE: using cu121 index. This is a packaging choice; it assumes NVIDIA driver supports CUDA 12.1 wheels.
+    Info "Forcing CUDA PyTorch from official cu121 index..."
+    & $py -m pip install --upgrade --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+  }
+}
+
+function Smoke-CheckTorch([string]$py) {
+  Info "Verifying torch + CUDA availability..."
+  & $py -c "import torch; print('torch', torch.__version__); print('cuda_available', torch.cuda.is_available()); print('cuda_version', torch.version.cuda)" | Out-Host
 }
 
 function Install-PythonDeps() {
@@ -122,6 +155,15 @@ function Install-PythonDeps() {
   Info "Installing TTS requirements..."
   & $py -m pip install -r $ReqTTS
 
+  if ($Accel -eq "cpu") {
+    Remove-CudaWheels $py
+  } else {
+    Install-CudaWheels $py
+  }
+
+  Force-InstallTorch $py $Accel
+  Smoke-CheckTorch $py
+
   Info "Installing project (editable)..."
   & $py -m pip install -e .
 
@@ -132,6 +174,7 @@ function Install-PythonDeps() {
 try {
   Push-Location $RepoRoot
 
+  Info "Requested accelerator mode: $Accel"
   Ensure-Python311
   Ensure-RequirementsFiles
   Ensure-FFmpegLocal
