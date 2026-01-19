@@ -139,7 +139,7 @@ function Install-Dependencies() {
 
 function Launch-App() {
     Write-Info "Launching OpenEduVoice GUI..."
-    python -m src.app.main_window
+    python -m src.gui.main_window
 }
 
 # -------------------------

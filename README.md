@@ -98,8 +98,9 @@ git clone https://github.com/anjali-bodke/openeduvoice.git
 
 ### 2. Launch the Application.
 - Open the project folder
-- Click on **start_OpenEduVoice.bat**, It will require some time to install and configure everything.
-- Successfull installation will open the GUI.
+- There are two files.
+   - File 1. **install_OpenEduVoice.bat**. Please click on this file, if you have dowloaded the porgram for first time.
+   - File 2. **run_OpenEduVoice.bat**. This file will ensure all dependecies are installed, and then open the GUI.
 
 ### 3. Utilize GUI to test out the project
 
@@ -116,11 +117,11 @@ git clone https://github.com/anjali-bodke/openeduvoice.git
 All output will be stored in:
 ```
 YourFile_transcript/
-├── media/             # Extracted audio
-├── converted_wav/     # Converted .wav files
-├── transcripts/       # Whisper transcripts
-├── translated/        # NLLB-200 based translated text
-├── tts_audio/         # Coqui-regenerated speech
-└── {original_name}_combined.pptx  #Presentation with translated Audio
+├── media/                                   # Extracted audio
+├── converted_wav/                           # Converted .wav files
+├── transcripts/                             # Whisper transcripts
+├── translated/                              # NLLB-200 based translated text
+├── tts_audio/                               # Coqui-regenerated speech
+└── {original_name}_combined.pptx            #Presentation with translated Audio
 ```
 ---
