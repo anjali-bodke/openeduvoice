@@ -125,3 +125,6 @@ YourFile_transcript/
 └── {original_name}_combined.pptx            #Presentation with translated Audio
 ```
 ---
+
+## Initially, If you don't have a Nvidia GPU or CUDA toolkit installed it will work only on CPU.
+## Inorder to install CUDA toolkit and use GPU for the software please follow the instructions [Nvidia-Toolkit Installation Guide](NvidiaCuda_Installation.md)
