@@ -1,3 +1,8 @@
+param(
+  [ValidateSet("auto","cpu","cuda")]
+  [string]$Accel = "auto"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -16,9 +21,23 @@ $FfmpegBin = Join-Path $RepoRoot "tools\ffmpeg\bin"
 $ffmpegExe = Join-Path $FfmpegBin "ffmpeg.exe"
 $ffprobeExe = Join-Path $FfmpegBin "ffprobe.exe"
 
-function VenvPython() {
-  $py = Join-Path $VenvDir "Scripts\python.exe"
-  if (-not (Test-Path $py)) { throw "venv not found. Run install_OpenEduVoice.bat first." }
+function VenvPython([string]$mode) {
+  $cfgPath = Join-Path $RepoRoot "venv_paths.json"
+
+  # Default local fallback if config is missing
+  $defaultVenv = Join-Path $RepoRoot "venv"
+
+  $venvDir = $defaultVenv
+  if (Test-Path $cfgPath) {
+    try {
+      $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
+      if ($mode -eq "cuda" -and $cfg.cuda) { $venvDir = $cfg.cuda }
+      elseif ($mode -eq "cpu" -and $cfg.cpu) { $venvDir = $cfg.cpu }
+    } catch {}
+  }
+
+  $py = Join-Path $venvDir "Scripts\python.exe"
+  if (-not (Test-Path $py)) { throw "Python not found for mode '$mode' at: $py. Run install_OpenEduVoice.bat (use 'cuda' if you want GPU support)." }
   return $py
 }
 
@@ -80,6 +99,18 @@ print(";".join(sorted(bins)))
 function SmokeCheckImports([string]$py) {
   Info "Checking OpenEduVoice import..."
   & $py -c "import OpenEduVoice; print('OpenEduVoice import OK')" | Out-Host
+  if ($LASTEXITCODE -ne 0) {
+    throw "OpenEduVoice is not installed in this virtual environment. Run install_OpenEduVoice.bat first."
+  }
+}
+
+function TorchCudaAvailable([string]$py) {
+  try {
+    $out = & $py -c "import torch; print('1' if torch.cuda.is_available() else '0')"
+    return ($out.Trim() -eq "1")
+  } catch {
+    return $false
+  }
 }
 
 function Verify-CublasLoad([string]$py) {
@@ -94,7 +125,7 @@ function Verify-CublasLoad([string]$py) {
   }
 
   if ($exitCode -ne 0) {
-    Warn "cublas64_12.dll not loadable. Continuing anyway (GPU may fail; CPU will work)."
+    Warn "cublas64_12.dll not loadable via direct ctypes check. If CUDA features work inside the app (e.g., faster-whisper runs on 'cuda'), you can ignore this."
   }
 }
 
@@ -106,15 +137,34 @@ function Launch([string]$py) {
 try {
   Push-Location $RepoRoot
 
-  $py = VenvPython
+   if ($Accel -eq "auto") {
+    $detected = "cpu"
+    try {
+      $null = & nvidia-smi 2>$null
+      if ($LASTEXITCODE -eq 0) { $detected = "cuda" }
+    } catch { $detected = "cpu" }
+
+    Info "AUTO mode: detected $detected"
+    $Accel = $detected
+  }
+
+  $py = VenvPython $Accel
   Ensure-FFmpegAvailable
   SmokeCheckImports $py
 
-  $cudaDllsPresent = Add-CudaWheelDllsToPath $py
-  if ($cudaDllsPresent) {
-    Verify-CublasLoad $py
+  $torchCuda = TorchCudaAvailable $py
+
+  if ($Accel -eq "cuda") {
+    if (-not $torchCuda) {
+      Warn "CUDA mode requested, but torch.cuda.is_available() is False in this venv."
+    } else {
+      Info "CUDA mode confirmed: torch.cuda.is_available() = True"
+    }
+
+    # Add CUDA wheel DLL dirs if they exist (won't hurt if absent)
+    $null = Add-CudaWheelDllsToPath $py
   } else {
-    Info "Skipping cublas DLL check (CPU mode)."
+    Info "CPU mode requested."
   }
 
   Launch $py

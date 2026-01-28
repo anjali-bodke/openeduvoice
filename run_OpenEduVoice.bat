@@ -1,17 +1,33 @@
 @echo off
-setlocal
-
-REM Always run from repo root
+title OpenEduVoice - Run
 cd /d "%~dp0"
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\run_OpenEduVoice.ps1"
-set exitcode=%errorlevel%
+echo ==========================================
+echo   OpenEduVoice Launcher
+echo ==========================================
+echo.
 
-if not %exitcode%==0 (
-  echo.
-  echo [ERROR] App start failed with exit code %exitcode%.
-  pause
-  exit /b %exitcode%
+REM --- Check venv ---
+if not exist "venv\Scripts\python.exe" (
+    echo [ERROR] OpenEduVoice is not installed.
+    echo.
+    echo Please run:
+    echo   install_OpenEduVoice.bat
+    echo.
+    pause
+    exit /b 1
 )
 
-exit /b 0
+echo [INFO] Virtual environment found.
+echo [INFO] Starting OpenEduVoice...
+echo.
+
+REM --- Run PowerShell runner ---
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/run_OpenEduVoice.ps1"
+
+echo.
+echo ==========================================
+echo OpenEduVoice finished or exited.
+echo ==========================================
+pause
+
