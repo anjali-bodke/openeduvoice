@@ -1,6 +1,6 @@
 param(
-  [ValidateSet("cpu","cuda")]
-  [string]$Accel = "cpu"
+  [ValidateSet("auto","cpu","cuda")]
+  [string]$Accel = "auto"
 )
 
 Set-StrictMode -Version Latest
@@ -12,17 +12,26 @@ function Err ($m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
 
 $RepoRoot   = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvDir    = Join-Path $RepoRoot "venv"
+
 $ToolsDir   = Join-Path $RepoRoot "tools"
 $FfmpegDir  = Join-Path $ToolsDir "ffmpeg"
 $FfmpegBin  = Join-Path $FfmpegDir "bin"
 $FfmpegZip  = Join-Path $FfmpegDir "ffmpeg-release-essentials.zip"
+$FfmpegUrl  = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
 $ReqCore = Join-Path $RepoRoot "requirements.txt"
 $ReqML   = Join-Path $RepoRoot "requirements-ml.txt"
 $ReqTTS  = Join-Path $RepoRoot "requirements-tts.txt"
 $PyProj  = Join-Path $RepoRoot "pyproject.toml"
 
-$FfmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+$ModeMarker = Join-Path $VenvDir ".openeduvoice_mode.txt"
+
+# PyTorch wheel channels
+$TorchIndexCPU  = "https://download.pytorch.org/whl/cpu"
+$TorchIndexCUDA = "https://download.pytorch.org/whl/cu126"   # keep consistent with CUDA 12.1 wheels
+
+# Minimum safe torch version due to CVE-2025-32434 message you saw
+$MinTorchVersion = "2.6.0"
 
 function Test-Command([string]$name) {
   return [bool](Get-Command $name -ErrorAction SilentlyContinue)
@@ -32,34 +41,34 @@ function Ensure-Tls12() {
   try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 }
 
+function Detect-Accel() {
+  # Simple for non-tech users: if nvidia-smi exists and reports GPU -> cuda else cpu
+  if (Test-Command "nvidia-smi") {
+    try {
+      $out = & nvidia-smi -L 2>$null
+      if ($LASTEXITCODE -eq 0 -and $out -and ($out -match "GPU")) { return "cuda" }
+    } catch {}
+  }
+  return "cpu"
+}
+
 function Ensure-Python311() {
   if (-not (Test-Command "python")) {
     throw "Python not found on PATH. Install Python 3.11 and ensure it's added to PATH."
   }
   $ver = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-  if ($ver -ne "3.11") {
-    throw "Python 3.11 is required. Found: $ver"
-  }
+  if ($ver -ne "3.11") { throw "Python 3.11 is required. Found: $ver" }
   Info "Python OK: $ver"
 }
 
-function Ensure-Venv() {
-  if (-not (Test-Path $VenvDir)) {
-    Info "Creating venv..."
-    & python -m venv $VenvDir
-  } else {
-    Info "venv already exists."
+function Ensure-RequirementsFiles() {
+  foreach ($f in @($ReqCore, $ReqML, $ReqTTS, $PyProj)) {
+    if (-not (Test-Path $f)) { throw "Missing required file: $f" }
   }
 }
 
-function VenvPython() {
-  $py = Join-Path $VenvDir "Scripts\python.exe"
-  if (-not (Test-Path $py)) { throw "venv python not found: $py" }
-  return $py
-}
-
 function Ensure-FFmpegLocal() {
-  $ffmpegExe = Join-Path $FfmpegBin "ffmpeg.exe"
+  $ffmpegExe  = Join-Path $FfmpegBin "ffmpeg.exe"
   $ffprobeExe = Join-Path $FfmpegBin "ffprobe.exe"
 
   if ((Test-Path $ffmpegExe) -and (Test-Path $ffprobeExe)) {
@@ -68,7 +77,6 @@ function Ensure-FFmpegLocal() {
   }
 
   Warn "Local FFmpeg not found. Downloading and extracting..."
-
   New-Item -ItemType Directory -Force -Path $FfmpegDir | Out-Null
   New-Item -ItemType Directory -Force -Path $FfmpegBin | Out-Null
 
@@ -88,82 +96,150 @@ function Ensure-FFmpegLocal() {
   Info "Extracting FFmpeg..."
   Expand-Archive -Path $FfmpegZip -DestinationPath $tmpExtract -Force
 
-  $foundFfmpeg = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffmpeg.exe" -File | Select-Object -First 1
+  $foundFfmpeg  = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffmpeg.exe"  -File | Select-Object -First 1
   $foundFfprobe = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffprobe.exe" -File | Select-Object -First 1
 
   if (-not $foundFfmpeg -or -not $foundFfprobe) {
     throw "FFmpeg extracted but ffmpeg.exe/ffprobe.exe not found."
   }
 
-  Copy-Item -Force $foundFfmpeg.FullName $ffmpegExe
+  Copy-Item -Force $foundFfmpeg.FullName  $ffmpegExe
   Copy-Item -Force $foundFfprobe.FullName $ffprobeExe
 
   Remove-Item -Recurse -Force $tmpExtract
   Info "Local FFmpeg ready: $FfmpegBin"
 }
 
-function Ensure-RequirementsFiles() {
-  foreach ($f in @($ReqCore, $ReqML, $ReqTTS, $PyProj)) {
-    if (-not (Test-Path $f)) { throw "Missing required file: $f" }
+function VenvPython() {
+  $py = Join-Path $VenvDir "Scripts\python.exe"
+  if (-not (Test-Path $py)) { throw "venv python not found: $py" }
+  return $py
+}
+
+function Read-ExistingVenvMode() {
+  if (Test-Path $ModeMarker) {
+    try { return (Get-Content -Raw $ModeMarker).Trim() } catch {}
   }
+  return ""
+}
+
+function Write-VenvMode([string]$mode) {
+  New-Item -ItemType Directory -Force -Path $VenvDir | Out-Null
+  Set-Content -Encoding UTF8 -Path $ModeMarker -Value $mode
+}
+
+function Ensure-Venv([string]$mode) {
+  $needRecreate = $false
+
+  if (Test-Path $VenvDir) {
+    $py = Join-Path $VenvDir "Scripts\python.exe"
+    if (-not (Test-Path $py)) {
+      Warn "Existing venv is broken (python.exe missing). Will recreate."
+      $needRecreate = $true
+    } else {
+      $oldMode = Read-ExistingVenvMode
+      if ($oldMode -and ($oldMode -ne $mode)) {
+        Warn "Existing venv mode '$oldMode' != requested '$mode'. Will recreate."
+        $needRecreate = $true
+      }
+    }
+  }
+
+  if ($needRecreate -and (Test-Path $VenvDir)) {
+    Warn "Removing existing venv..."
+    Remove-Item -Recurse -Force $VenvDir
+  }
+
+  if (-not (Test-Path $VenvDir)) {
+    Info "Creating venv..."
+    & python -m venv $VenvDir
+  } else {
+    Info "venv already exists."
+  }
+
+  Write-VenvMode $mode
+}
+
+function Pip-Upgrade([string]$py) {
+  Info "Upgrading pip..."
+  & $py -m pip install --upgrade pip
+}
+
+function Install-Core([string]$py) {
+  Info "Installing core requirements..."
+  & $py -m pip install -r $ReqCore
+}
+
+function Install-TTS([string]$py) {
+  Info "Installing TTS requirements..."
+  & $py -m pip install -r $ReqTTS
+
+  # Fix: gruut missing in many setups unless languages extra is installed
+  Info "Ensuring coqui-tts languages (gruut) are installed..."
+  & $py -m pip install --upgrade "coqui-tts[languages]"
+}
+
+function Install-CudaWheels([string]$py) {
+  Info "Installing CUDA runtime wheels (for CUDA mode)..."
+  & $py -m pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12
 }
 
 function Remove-CudaWheels([string]$py) {
   Info "Ensuring CPU mode: removing CUDA runtime wheels if present..."
   $pkgs = @("nvidia-cuda-runtime-cu12","nvidia-cublas-cu12","nvidia-cudnn-cu12")
   foreach ($p in $pkgs) {
-    try {
-      & $py -m pip uninstall -y $p | Out-Null
-    } catch {}
+    try { & $py -m pip uninstall -y $p | Out-Null } catch {}
   }
 }
 
-function Install-CudaWheels([string]$py) {
-  Info "Installing CUDA runtime wheels (only for CUDA mode)..."
-  & $py -m pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12
-}
-
-function Force-InstallTorch([string]$py, [string]$mode) {
-  # We force torch install AFTER requirements to end up in a consistent state.
+function Install-TorchForMode([string]$py, [string]$mode) {
   if ($mode -eq "cpu") {
-    Info "Forcing CPU PyTorch from official CPU index..."
-    & $py -m pip install --upgrade --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+    Info "Installing torch/torchaudio (CPU) from official PyTorch index..."
+    & $py -m pip install --upgrade --force-reinstall `
+      "torch>=$MinTorchVersion" "torchaudio>=$MinTorchVersion" `
+      --index-url $TorchIndexCPU
   } else {
-    # NOTE: using cu121 index. This is a packaging choice; it assumes NVIDIA driver supports CUDA 12.1 wheels.
-    Info "Forcing CUDA PyTorch from official cu121 index..."
-    & $py -m pip install --upgrade --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+    Info "Installing torch/torchaudio (CUDA) from official PyTorch cu126 index..."
+    & $py -m pip install --upgrade --force-reinstall `
+      "torch>=$MinTorchVersion" "torchaudio>=$MinTorchVersion" `
+      --index-url $TorchIndexCUDA
   }
 }
 
-function Smoke-CheckTorch([string]$py) {
-  Info "Verifying torch + CUDA availability..."
+function Install-ML-Without-Torch([string]$py) {
+  # requirements-ml.txt contains torch + torchaudio.
+  # We MUST NOT let pip pull the wrong (+cpu) wheel when in CUDA mode.
+  $tmp = Join-Path $RepoRoot "tools\_runtime\requirements-ml.notorch.txt"
+  New-Item -ItemType Directory -Force -Path (Split-Path $tmp) | Out-Null
+
+  $lines = Get-Content -Path $ReqML -ErrorAction Stop
+  $filtered = @()
+  foreach ($ln in $lines) {
+    $t = ($ln.Trim())
+    if (-not $t) { continue }
+    if ($t.StartsWith("#")) { continue }
+    if ($t -match '^(torch|torchaudio)\b') { continue }
+    $filtered += $ln
+  }
+  Set-Content -Encoding UTF8 -Path $tmp -Value $filtered
+
+  Info "Installing ML requirements (excluding torch/torchaudio)..."
+  & $py -m pip install -r $tmp
+}
+
+function Torch-Smoke([string]$py) {
+  Info "Torch smoke-check..."
   & $py -c "import torch; print('torch', torch.__version__); print('cuda_available', torch.cuda.is_available()); print('cuda_version', torch.version.cuda)" | Out-Host
 }
 
-function Install-PythonDeps() {
-  $py = VenvPython
+function Torch-CudaAvailable([string]$py) {
+  try {
+    $out = & $py -c "import torch; print('1' if torch.cuda.is_available() else '0')"
+    return ($out.Trim() -eq "1")
+  } catch { return $false }
+}
 
-  Info "Upgrading pip..."
-  & $py -m pip install --upgrade pip
-
-  Info "Installing core requirements..."
-  & $py -m pip install -r $ReqCore
-
-  Info "Installing ML requirements..."
-  & $py -m pip install -r $ReqML
-
-  Info "Installing TTS requirements..."
-  & $py -m pip install -r $ReqTTS
-
-  if ($Accel -eq "cpu") {
-    Remove-CudaWheels $py
-  } else {
-    Install-CudaWheels $py
-  }
-
-  Force-InstallTorch $py $Accel
-  Smoke-CheckTorch $py
-
+function Install-Project([string]$py) {
   Info "Installing project (editable)..."
   & $py -m pip install -e .
 
@@ -174,12 +250,48 @@ function Install-PythonDeps() {
 try {
   Push-Location $RepoRoot
 
-  Info "Requested accelerator mode: $Accel"
+  if ($Accel -eq "auto") {
+    $Accel = Detect-Accel
+    Info "Auto-detected accelerator mode: $Accel"
+  } else {
+    Info "Requested accelerator mode: $Accel"
+  }
+
   Ensure-Python311
   Ensure-RequirementsFiles
   Ensure-FFmpegLocal
-  Ensure-Venv
-  Install-PythonDeps
+  Ensure-Venv $Accel
+
+  $py = VenvPython
+
+  Pip-Upgrade $py
+
+  Install-Core $py
+  Install-ML-Without-Torch $py
+  Install-TTS $py
+
+  if ($Accel -eq "cuda") {
+    Install-CudaWheels $py
+    Install-TorchForMode $py "cuda"
+
+    Torch-Smoke $py
+
+    # If CUDA torch still not available, fallback automatically to CPU torch so the app runs.
+    if (-not (Torch-CudaAvailable $py)) {
+      Warn "CUDA was detected, but torch.cuda.is_available() is still False after CUDA torch install."
+      Warn "Falling back to CPU torch so the app can run."
+      Remove-CudaWheels $py
+      Install-TorchForMode $py "cpu"
+      Write-VenvMode "cpu"
+      Torch-Smoke $py
+    }
+  } else {
+    Remove-CudaWheels $py
+    Install-TorchForMode $py "cpu"
+    Torch-Smoke $py
+  }
+
+  Install-Project $py
 
   Info "Install step finished."
   exit 0

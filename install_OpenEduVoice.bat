@@ -4,12 +4,12 @@ setlocal
 REM Always run from repo root
 cd /d "%~dp0"
 
-REM Optional: allow "cuda" as first argument.
-REM Usage:
-REM   install_OpenEduVoice.bat        -> CPU (default)
-REM   install_OpenEduVoice.bat cuda   -> GPU/CUDA path
+REM One-click default: auto-detect (NVIDIA GPU + driver -> CUDA, else CPU)
+REM Optional override:
+REM   install_OpenEduVoice.bat cpu
+REM   install_OpenEduVoice.bat cuda
 set "ACCEL=%~1"
-if "%ACCEL%"=="" set "ACCEL=cpu"
+if "%ACCEL%"=="" set "ACCEL=auto"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install_OpenEduVoice.ps1" -Accel "%ACCEL%"
 set exitcode=%errorlevel%
