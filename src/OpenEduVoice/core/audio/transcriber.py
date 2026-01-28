@@ -61,7 +61,7 @@ def _select_device_and_compute(model_name: str) -> tuple[str, str]:
       - torch says CUDA is available, AND
       - CUDA wheel DLL folders exist in this venv (Windows)
     """
-    cuda_ok = _torch_cuda_available() and _cuda_wheels_present()
+    cuda_ok = _torch_cuda_available()
     if cuda_ok:
         # On CUDA, float16 is usually the right default for speed.
         return "cuda", "float16"
@@ -208,7 +208,15 @@ def transcribe_audio_files(
 
     for wav_file in wav_files:
         try:
-            segments, _ = model.transcribe(str(wav_file))
+            segments, _ = model.transcribe(str(wav_file),
+                                        language="de",
+                                        beam_size=5,
+                                        best_of=5,
+                                        temperature=[0.0, 0.2, 0.4, 0.6, 0.8],
+                                        vad_filter=True,
+                                        condition_on_previous_text=True,                               
+            )
+            
             # Concatenate segment texts with spaces (simple, reliable)
             transcript = " ".join(getattr(s, "text", "") for s in segments).strip()
             out_path = output_dir / f"{wav_file.stem}.txt"
