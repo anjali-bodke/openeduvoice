@@ -1,1 +1,1 @@
-coqui-tts
+coqui-tts[codec,languages]
