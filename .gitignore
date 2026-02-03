@@ -43,7 +43,7 @@ cache/
 *.pptx~
 
 # =========================
-# Models (must NEVER be committed)
+# Models 
 # =========================
 models/
 assets/models/
@@ -51,8 +51,12 @@ hf_cache/
 torch_cache/
 
 # =========================
-# Build artifacts (future)
+# Build artifacts
 # =========================
 build/
 dist/
 *.spec
+tools/_runtime/
+tools/ffmpeg/bin/
+tools/ffmpeg/*.zip
+
