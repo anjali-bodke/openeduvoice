@@ -14,29 +14,3 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[project.optional-dependencies]
-
-ml = [
-    "torch",
-    "torchaudio",
-    "transformers",
-    "sentencepiece",
-    "safetensors",
-    "tokenizers",
-    "regex"
-]
-
-tts = [
-    "coqui-tts"
-]
-
-cuda12 = [
-  "nvidia-cuda-runtime-cu12",
-  "nvidia-cublas-cu12",
-  "nvidia-cudnn-cu12"
-]
-
-full-gpu = [
-  "OpenEduVoice[ml,tts,cuda12]"
-]
