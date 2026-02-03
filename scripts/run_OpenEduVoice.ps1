@@ -17,27 +17,15 @@ function Err ($m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
 $RepoRoot  = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvDir   = Join-Path $RepoRoot "venv"
 
-$FfmpegBin = Join-Path $RepoRoot "tools\ffmpeg\bin"
-$ffmpegExe = Join-Path $FfmpegBin "ffmpeg.exe"
+$FfmpegBin  = Join-Path $RepoRoot "tools\ffmpeg\bin"
+$ffmpegExe  = Join-Path $FfmpegBin "ffmpeg.exe"
 $ffprobeExe = Join-Path $FfmpegBin "ffprobe.exe"
 
-function VenvPython([string]$mode) {
-  $cfgPath = Join-Path $RepoRoot "venv_paths.json"
-
-  # Default local fallback if config is missing
-  $defaultVenv = Join-Path $RepoRoot "venv"
-
-  $venvDir = $defaultVenv
-  if (Test-Path $cfgPath) {
-    try {
-      $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
-      if ($mode -eq "cuda" -and $cfg.cuda) { $venvDir = $cfg.cuda }
-      elseif ($mode -eq "cpu" -and $cfg.cpu) { $venvDir = $cfg.cpu }
-    } catch {}
+function VenvPython() {
+  $py = Join-Path $VenvDir "Scripts\python.exe"
+  if (-not (Test-Path $py)) {
+    throw "venv python not found: $py. Run install_OpenEduVoice.bat first."
   }
-
-  $py = Join-Path $venvDir "Scripts\python.exe"
-  if (-not (Test-Path $py)) { throw "Python not found for mode '$mode' at: $py. Run install_OpenEduVoice.bat (use 'cuda' if you want GPU support)." }
   return $py
 }
 
@@ -113,22 +101,6 @@ function TorchCudaAvailable([string]$py) {
   }
 }
 
-function Verify-CublasLoad([string]$py) {
-  Info "Verifying cublas64_12.dll load (runner)..."
-
-  $exitCode = 0
-  try {
-    & $py -c "import ctypes; ctypes.WinDLL('cublas64_12.dll'); print('cublas load OK')" 2>$null
-    $exitCode = $LASTEXITCODE
-  } catch {
-    $exitCode = 1
-  }
-
-  if ($exitCode -ne 0) {
-    Warn "cublas64_12.dll not loadable via direct ctypes check. If CUDA features work inside the app (e.g., faster-whisper runs on 'cuda'), you can ignore this."
-  }
-}
-
 function Launch([string]$py) {
   Info "Launching GUI..."
   & $py -m OpenEduVoice
@@ -137,7 +109,7 @@ function Launch([string]$py) {
 try {
   Push-Location $RepoRoot
 
-   if ($Accel -eq "auto") {
+  if ($Accel -eq "auto") {
     $detected = "cpu"
     try {
       $null = & nvidia-smi 2>$null
@@ -146,22 +118,20 @@ try {
 
     Info "AUTO mode: detected $detected"
     $Accel = $detected
+  } else {
+    Info "Requested mode: $Accel"
   }
 
-  $py = VenvPython $Accel
+  $py = VenvPython
   Ensure-FFmpegAvailable
   SmokeCheckImports $py
 
-  $torchCuda = TorchCudaAvailable $py
-
   if ($Accel -eq "cuda") {
-    if (-not $torchCuda) {
+    if (-not (TorchCudaAvailable $py)) {
       Warn "CUDA mode requested, but torch.cuda.is_available() is False in this venv."
     } else {
       Info "CUDA mode confirmed: torch.cuda.is_available() = True"
     }
-
-    # Add CUDA wheel DLL dirs if they exist (won't hurt if absent)
     $null = Add-CudaWheelDllsToPath $py
   } else {
     Info "CPU mode requested."

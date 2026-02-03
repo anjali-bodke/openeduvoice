@@ -30,7 +30,7 @@ $ModeMarker = Join-Path $VenvDir ".openeduvoice_mode.txt"
 $TorchIndexCPU  = "https://download.pytorch.org/whl/cpu"
 $TorchIndexCUDA = "https://download.pytorch.org/whl/cu126"   # keep consistent with CUDA 12.1 wheels
 
-# Minimum safe torch version due to CVE-2025-32434 message you saw
+# Minimum safe torch version due to CVE-2025-32434
 $MinTorchVersion = "2.6.0"
 
 function Test-Command([string]$name) {
@@ -80,11 +80,15 @@ function Ensure-FFmpegLocal() {
   New-Item -ItemType Directory -Force -Path $FfmpegDir | Out-Null
   New-Item -ItemType Directory -Force -Path $FfmpegBin | Out-Null
 
-  if (-not (Test-Path $FfmpegZip)) {
+  function Download-FFmpegZip() {
     Ensure-Tls12
     Info "Downloading FFmpeg zip..."
     Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip -UseBasicParsing
     Info "Downloaded: $FfmpegZip"
+  }
+
+  if (-not (Test-Path $FfmpegZip)) {
+    Download-FFmpegZip
   } else {
     Info "FFmpeg zip already exists: $FfmpegZip"
   }
@@ -94,7 +98,27 @@ function Ensure-FFmpegLocal() {
   New-Item -ItemType Directory -Force -Path $tmpExtract | Out-Null
 
   Info "Extracting FFmpeg..."
-  Expand-Archive -Path $FfmpegZip -DestinationPath $tmpExtract -Force
+  $extractedOk = $false
+
+  try {
+    Expand-Archive -Path $FfmpegZip -DestinationPath $tmpExtract -Force
+    $extractedOk = $true
+  } catch {
+    Warn "FFmpeg zip extraction failed (zip may be corrupt). Deleting zip and re-downloading..."
+    try { Remove-Item -Force $FfmpegZip } catch {}
+    Download-FFmpegZip
+
+    # Retry exactly once
+    if (Test-Path $tmpExtract) { Remove-Item -Recurse -Force $tmpExtract }
+    New-Item -ItemType Directory -Force -Path $tmpExtract | Out-Null
+
+    Expand-Archive -Path $FfmpegZip -DestinationPath $tmpExtract -Force
+    $extractedOk = $true
+  }
+
+  if (-not $extractedOk) {
+    throw "Failed to extract FFmpeg zip."
+  }
 
   $foundFfmpeg  = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffmpeg.exe"  -File | Select-Object -First 1
   $foundFfprobe = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffprobe.exe" -File | Select-Object -First 1
@@ -163,25 +187,30 @@ function Ensure-Venv([string]$mode) {
 function Pip-Upgrade([string]$py) {
   Info "Upgrading pip..."
   & $py -m pip install --upgrade pip
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
 function Install-Core([string]$py) {
   Info "Installing core requirements..."
   & $py -m pip install -r $ReqCore
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
 function Install-TTS([string]$py) {
   Info "Installing TTS requirements..."
   & $py -m pip install -r $ReqTTS
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 
   # Fix: gruut missing in many setups unless languages extra is installed
   Info "Ensuring coqui-tts languages (gruut) are installed..."
   & $py -m pip install --upgrade "coqui-tts[languages]"
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
 function Install-CudaWheels([string]$py) {
   Info "Installing CUDA runtime wheels (for CUDA mode)..."
   & $py -m pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
 function Remove-CudaWheels([string]$py) {
@@ -198,11 +227,13 @@ function Install-TorchForMode([string]$py, [string]$mode) {
     & $py -m pip install --upgrade --force-reinstall `
       "torch>=$MinTorchVersion" "torchaudio>=$MinTorchVersion" `
       --index-url $TorchIndexCPU
+      if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
   } else {
     Info "Installing torch/torchaudio (CUDA) from official PyTorch cu126 index..."
     & $py -m pip install --upgrade --force-reinstall `
       "torch>=$MinTorchVersion" "torchaudio>=$MinTorchVersion" `
       --index-url $TorchIndexCUDA
+      if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
   }
 }
 
@@ -225,6 +256,7 @@ function Install-ML-Without-Torch([string]$py) {
 
   Info "Installing ML requirements (excluding torch/torchaudio)..."
   & $py -m pip install -r $tmp
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
 function Torch-Smoke([string]$py) {
@@ -242,6 +274,7 @@ function Torch-CudaAvailable([string]$py) {
 function Install-Project([string]$py) {
   Info "Installing project (editable)..."
   & $py -m pip install -e .
+  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 
   Info "Running pip check..."
   & $py -m pip check
