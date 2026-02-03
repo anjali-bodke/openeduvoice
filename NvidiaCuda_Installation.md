@@ -23,4 +23,6 @@ This installation guide will enable the project to use Nvidia GPU and CUDA. This
 - Download the appropriate drivers based on your OS (Windows).
 - make sure you choose exe(local) in the end.
 
+# After driver + toolkit, **run install_OpenEduVoice.bat**. The installer will set up the required Python CUDA runtime packages.
+
 # Finally after all the steps have been followed you can now use the Nvidia GPU with the help of CUDA toolkit for he software.

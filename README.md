@@ -19,7 +19,8 @@ The **OpenEduVoice** enables multilingual transformation of PowerPoint presentat
 - Regenerating speech via TTS
 - Reintegrating translated text and audio back into the original presentation
 
-All processing is **fully offline** once models are downloaded.
+First-time installation downloads all the dependencies/models; after that, processing runs offline.
+All the processing is **fully offline** once models are downloaded.
 
 ---
 
@@ -99,8 +100,8 @@ git clone https://github.com/anjali-bodke/openeduvoice.git
 ### 2. Launch the Application.
 - Open the project folder
 - There are two files.
-   - File 1. **install_OpenEduVoice.bat**. Please click on this file, if you have dowloaded the porgram for first time.
-   - File 2. **run_OpenEduVoice.bat**. This file will ensure all dependecies are installed, and then open the GUI.
+   - File 1. **install_OpenEduVoice.bat**. Please click on this file, if you have dowloaded the porgram for first time. This file will ensure all dependecies are installed.
+   - File 2. **run_OpenEduVoice.bat**. This file will give a final check, run the application and then open the GUI.
 
 ### 3. Utilize GUI to test out the project
 
