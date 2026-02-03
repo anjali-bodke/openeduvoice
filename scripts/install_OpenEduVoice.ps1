@@ -19,6 +19,7 @@ $FfmpegBin  = Join-Path $FfmpegDir "bin"
 $FfmpegZip  = Join-Path $FfmpegDir "ffmpeg-release-essentials.zip"
 $FfmpegUrl  = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
+$ReqLock = Join-Path $RepoRoot "requirements.lock.txt"
 $ReqCore = Join-Path $RepoRoot "requirements.txt"
 $ReqML   = Join-Path $RepoRoot "requirements-ml.txt"
 $ReqTTS  = Join-Path $RepoRoot "requirements-tts.txt"
@@ -62,9 +63,49 @@ function Ensure-Python311() {
 }
 
 function Ensure-RequirementsFiles() {
-  foreach ($f in @($ReqCore, $ReqML, $ReqTTS, $PyProj)) {
+  foreach ($f in @($ReqLock, $ReqCore, $ReqML, $ReqTTS, $PyProj)) {
     if (-not (Test-Path $f)) { throw "Missing required file: $f" }
   }
+}
+
+function Validate-LockFile() {
+  Info "Validating requirements.lock.txt (must be CPU-safe)..."
+
+  $content = Get-Content -Path $ReqLock -ErrorAction Stop
+
+  # 1) Must NOT contain torch family (installed via PyTorch index-url later)
+  $badTorch = $content | Where-Object { $_ -match '^(torch|torchaudio|torchvision)=='}
+  if ($badTorch) {
+    throw "requirements.lock.txt must NOT pin torch/torchaudio/torchvision. Remove these lines from the lock file."
+  }
+
+  # 2) Must NOT contain CUDA wheel packages (installed only in cuda mode)
+  $badNvidia = $content | Where-Object { $_ -match '^nvidia-.*=='}
+  if ($badNvidia) {
+    throw "requirements.lock.txt must NOT include nvidia-* CUDA wheels. Those are installed only in CUDA mode by the installer."
+  }
+
+  # 3) Must pin the critical ones (sanity)
+  if (-not ($content | Where-Object { $_ -match '^ctranslate2=='})) {
+    throw "requirements.lock.txt must include a pinned ctranslate2==... line."
+  }
+  if (-not ($content | Where-Object { $_ -match '^faster-whisper=='})) {
+    throw "requirements.lock.txt must include a pinned faster-whisper==... line."
+  }
+
+  #4) Block editable content
+  if ($content -match '^-e\s+') {
+    Write-Error "requirements.lock.txt must not contain editable (-e) installs."
+    exit 1
+  }
+
+  if ($content -match '^OpenEduVoice==') {
+    Write-Error "requirements.lock.txt must not contain the project itself (OpenEduVoice)."
+    exit 1
+  }
+
+
+  Info "Lock file validation OK."
 }
 
 function Ensure-FFmpegLocal() {
@@ -190,20 +231,9 @@ function Pip-Upgrade([string]$py) {
   if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
-function Install-Core([string]$py) {
-  Info "Installing core requirements..."
-  & $py -m pip install -r $ReqCore
-  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
-}
-
-function Install-TTS([string]$py) {
-  Info "Installing TTS requirements..."
-  & $py -m pip install -r $ReqTTS
-  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
-
-  # Fix: gruut missing in many setups unless languages extra is installed
-  Info "Ensuring coqui-tts languages (gruut) are installed..."
-  & $py -m pip install --upgrade "coqui-tts[languages]"
+function Install-Locked([string]$py) {
+  Info "Installing locked dependencies from requirements.lock.txt..."
+  & $py -m pip install -r $ReqLock
   if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
@@ -235,28 +265,6 @@ function Install-TorchForMode([string]$py, [string]$mode) {
       --index-url $TorchIndexCUDA
       if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
   }
-}
-
-function Install-ML-Without-Torch([string]$py) {
-  # requirements-ml.txt contains torch + torchaudio.
-  # We MUST NOT let pip pull the wrong (+cpu) wheel when in CUDA mode.
-  $tmp = Join-Path $RepoRoot "tools\_runtime\requirements-ml.notorch.txt"
-  New-Item -ItemType Directory -Force -Path (Split-Path $tmp) | Out-Null
-
-  $lines = Get-Content -Path $ReqML -ErrorAction Stop
-  $filtered = @()
-  foreach ($ln in $lines) {
-    $t = ($ln.Trim())
-    if (-not $t) { continue }
-    if ($t.StartsWith("#")) { continue }
-    if ($t -match '^(torch|torchaudio)\b') { continue }
-    $filtered += $ln
-  }
-  Set-Content -Encoding UTF8 -Path $tmp -Value $filtered
-
-  Info "Installing ML requirements (excluding torch/torchaudio)..."
-  & $py -m pip install -r $tmp
-  if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
 function Torch-Smoke([string]$py) {
@@ -292,6 +300,7 @@ try {
 
   Ensure-Python311
   Ensure-RequirementsFiles
+  Validate-LockFile
   Ensure-FFmpegLocal
   Ensure-Venv $Accel
 
@@ -299,9 +308,7 @@ try {
 
   Pip-Upgrade $py
 
-  Install-Core $py
-  Install-ML-Without-Torch $py
-  Install-TTS $py
+  Install-Locked $py
 
   if ($Accel -eq "cuda") {
     Install-CudaWheels $py
