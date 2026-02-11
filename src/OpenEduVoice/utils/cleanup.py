@@ -88,6 +88,38 @@ def _normalize_editions_line(line: str) -> str:
     )
     return line
 
+# --- Suspicious legal boilerplate (hallucination guard) ---
+_SUSPECT_LEGAL_PATTERNS: List[re.Pattern] = [
+    re.compile(r"\bThis appropriation is intended to cover\b", re.IGNORECASE),
+    re.compile(r"\bCommission's proposal for a regulation\b", re.IGNORECASE),
+    re.compile(r"\bEuropean Parliament and of the Council\b", re.IGNORECASE),
+    re.compile(r"\bMember States\b", re.IGNORECASE),
+    re.compile(r"\bimplementation of the programme\b", re.IGNORECASE),
+]
+
+
+def _is_reference_context(lines: List[str]) -> bool:
+    """
+    Detect bibliography/reference slides conservatively.
+    Triggers only if multiple strong signals exist.
+    """
+    joined = " ".join(lines)
+
+    signals = 0
+
+    if joined.count(";") >= 3:
+        signals += 1
+
+    if re.search(r"\b(ISBN|Auflage|Aufl\.)\b", joined, re.IGNORECASE):
+        signals += 1
+
+    if re.search(r"\b(19|20)\d{2}\b", joined):
+        signals += 1
+
+    if re.search(r"\b(Literatur|Literature|References)\b", joined, re.IGNORECASE):
+        signals += 1
+
+    return signals >= 2
 
 # --- Minimal, safe terminology normalization for recurring issues ---
 # Keep this conservative: exact phrases or tight regexes only.
@@ -156,6 +188,14 @@ def apply_glossary_cleanup_to_lines(
 
         cleaned.append(line_clean)
 
+    if _is_reference_context(cleaned):
+        filtered : List[str] = []
+        for line in cleaned:
+            if any(p.search(line) for p in _SUSPECT_LEGAL_PATTERNS):
+                continue
+            filtered.append(line)
+        cleaned = filtered
+
     return cleaned
 
 
@@ -192,5 +232,12 @@ def apply_glossary_cleanup_with_source(
 
         cleaned.append(out_clean)
 
+    if _is_reference_context(cleaned):
+        filtered : List[str] = []
+        for line in cleaned:
+            if any(p.search(line) for p in _SUSPECT_LEGAL_PATTERNS):
+                continue
+            filtered.append(line)
+        cleaned = filtered
+
     return cleaned
-0
