@@ -192,6 +192,7 @@ def apply_glossary_cleanup_to_lines(
         filtered : List[str] = []
         for line in cleaned:
             if any(p.search(line) for p in _SUSPECT_LEGAL_PATTERNS):
+                filtered.append("")
                 continue
             filtered.append(line)
         cleaned = filtered
@@ -234,8 +235,9 @@ def apply_glossary_cleanup_with_source(
 
     if _is_reference_context(cleaned):
         filtered : List[str] = []
-        for line in cleaned:
+        for index, line in enumerate(cleaned):
             if any(p.search(line) for p in _SUSPECT_LEGAL_PATTERNS):
+                filtered.append(src_lines[index] if index < len(src_lines) else "")
                 continue
             filtered.append(line)
         cleaned = filtered

@@ -187,7 +187,11 @@ def extract_slide_text(pptx_path: Path, output_dir: Path, log_fn=print) -> list[
 
             out_file = output_dir / f"slide{slide_idx}.txt"
             # Escape internal newlines so we keep 1 line per paragraph
-            out_file.write_text("\n".join(s.replace("\n", "\\n") for s in lines), encoding="utf-8")
+            out_file.write_text(
+                "\n".join(s.replace("\n", "\\n") for s in lines)
+                + ("\n" if lines else ""),
+                encoding="utf-8",
+            )
             log_fn(f"[INFO] slide{slide_idx}.txt: {len(lines)} paragraphs")
             saved_files.append(out_file)
 
