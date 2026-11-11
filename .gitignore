@@ -59,4 +59,5 @@ dist/
 tools/_runtime/
 tools/ffmpeg/bin/
 tools/ffmpeg/*.zip
-
+tools/pip-cache/
+tools/tesseract/

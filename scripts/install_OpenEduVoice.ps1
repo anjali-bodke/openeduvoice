@@ -5,12 +5,15 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
 function Info($m) { Write-Host "[INFO]  $m" }
 function Warn($m) { Write-Host "[WARN]  $m" -ForegroundColor Yellow }
 function Err ($m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
 
 $RepoRoot   = Resolve-Path (Join-Path $PSScriptRoot "..")
+. (Join-Path $PSScriptRoot "runtime_environment.ps1")
+Set-OpenEduVoiceEnvironment $RepoRoot
 $VenvDir    = Join-Path $RepoRoot "venv"
 
 $ToolsDir   = Join-Path $RepoRoot "tools"
@@ -20,19 +23,16 @@ $FfmpegZip  = Join-Path $FfmpegDir "ffmpeg-release-essentials.zip"
 $FfmpegUrl  = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
 $ReqLock = Join-Path $RepoRoot "requirements.lock.txt"
-$ReqCore = Join-Path $RepoRoot "requirements.txt"
-$ReqML   = Join-Path $RepoRoot "requirements-ml.txt"
-$ReqTTS  = Join-Path $RepoRoot "requirements-tts.txt"
 $PyProj  = Join-Path $RepoRoot "pyproject.toml"
 
 $ModeMarker = Join-Path $VenvDir ".openeduvoice_mode.txt"
 
 # PyTorch wheel channels
 $TorchIndexCPU  = "https://download.pytorch.org/whl/cpu"
-$TorchIndexCUDA = "https://download.pytorch.org/whl/cu126"   # keep consistent with CUDA 12.1 wheels
+$TorchIndexCUDA = "https://download.pytorch.org/whl/cu126"
 
-# Minimum safe torch version due to CVE-2025-32434
-$MinTorchVersion = "2.6.0"
+# Keep the CPU and CUDA variants on the same release as the original full lock.
+$TorchVersion = "2.10.0"
 
 function Test-Command([string]$name) {
   return [bool](Get-Command $name -ErrorAction SilentlyContinue)
@@ -63,7 +63,7 @@ function Ensure-Python311() {
 }
 
 function Ensure-RequirementsFiles() {
-  foreach ($f in @($ReqLock, $ReqCore, $ReqML, $ReqTTS, $PyProj)) {
+  foreach ($f in @($ReqLock, $PyProj)) {
     if (-not (Test-Path $f)) { throw "Missing required file: $f" }
   }
 }
@@ -117,61 +117,98 @@ function Ensure-FFmpegLocal() {
     return
   }
 
+  function Ensure-TesseractLocal() {
+    $dir = Join-Path $ToolsDir "tesseract"
+    $exe = Join-Path $dir "tesseract.exe"
+    if (-not (Test-Path $exe)) {
+      if (Test-Path $dir) {
+        throw "Tesseract directory exists but contains no tesseract.exe: $dir. Inspect it before retrying."
+      }
+      $installer = Join-Path $ToolsDir ("tesseract-setup-" + [guid]::NewGuid().ToString("N") + ".exe")
+      $url = "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe"
+      $expected = "bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4"
+      try {
+        Info "Downloading the UB Mannheim Tesseract installer..."
+        New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
+        Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+        if ((Get-FileHash -Algorithm SHA256 $installer).Hash -ne $expected) {
+          throw "Tesseract installer checksum mismatch."
+        }
+        $process = Start-Process -FilePath $installer -ArgumentList @("/S", "/D=$dir") -Wait -PassThru
+        if ($process.ExitCode -ne 0 -or -not (Test-Path $exe)) {
+          throw "Tesseract installation failed (exit code $($process.ExitCode))."
+        }
+      } finally {
+        if (Test-Path $installer) { Remove-Item -Force $installer }
+      }
+    }
+    $data = Join-Path $dir "tessdata"
+    New-Item -ItemType Directory -Force -Path $data | Out-Null
+    foreach ($lang in @("eng", "deu")) {
+      $destination = Join-Path $data "$lang.traineddata"
+      if (-not (Test-Path $destination)) {
+        $temporary = Join-Path $data ("$lang-" + [guid]::NewGuid().ToString("N") + ".tmp")
+        try {
+          Info "Downloading Tesseract $lang language data..."
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/$lang.traineddata" -OutFile $temporary -UseBasicParsing
+          Move-Item $temporary $destination
+        } finally {
+          if (Test-Path $temporary) { Remove-Item -Force $temporary }
+        }
+      }
+    }
+    $languages = & $exe --tessdata-dir $data --list-langs
+    if ($LASTEXITCODE -ne 0 -or $languages -notcontains "eng" -or $languages -notcontains "deu") {
+      throw "Tesseract or its English/German language data failed validation."
+    }
+    Set-OpenEduVoiceEnvironment $RepoRoot
+  }
+
   Warn "Local FFmpeg not found. Downloading and extracting..."
   New-Item -ItemType Directory -Force -Path $FfmpegDir | Out-Null
   New-Item -ItemType Directory -Force -Path $FfmpegBin | Out-Null
 
-  function Download-FFmpegZip() {
+  function Download-FFmpegZip([string]$destination) {
     Ensure-Tls12
     Info "Downloading FFmpeg zip..."
-    Invoke-WebRequest -Uri $FfmpegUrl -OutFile $FfmpegZip -UseBasicParsing
-    Info "Downloaded: $FfmpegZip"
+    Invoke-WebRequest -Uri $FfmpegUrl -OutFile $destination -UseBasicParsing
+    Info "Downloaded FFmpeg archive."
   }
 
-  if (-not (Test-Path $FfmpegZip)) {
-    Download-FFmpegZip
-  } else {
-    Info "FFmpeg zip already exists: $FfmpegZip"
-  }
-
-  $tmpExtract = Join-Path $FfmpegDir "_tmp_extract"
-  if (Test-Path $tmpExtract) { Remove-Item -Recurse -Force $tmpExtract }
+  $tmpExtract = Join-Path $FfmpegDir ("_tmp_extract_" + [guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Force -Path $tmpExtract | Out-Null
 
-  Info "Extracting FFmpeg..."
-  $extractedOk = $false
-
   try {
-    Expand-Archive -Path $FfmpegZip -DestinationPath $tmpExtract -Force
-    $extractedOk = $true
-  } catch {
-    Warn "FFmpeg zip extraction failed (zip may be corrupt). Deleting zip and re-downloading..."
-    try { Remove-Item -Force $FfmpegZip } catch {}
-    Download-FFmpegZip
+    Info "Extracting FFmpeg..."
+    $extracted = Join-Path $tmpExtract "extracted"
+    $useDownload = -not (Test-Path $FfmpegZip)
+    if (-not $useDownload) {
+      try {
+        Expand-Archive -Path $FfmpegZip -DestinationPath $extracted -Force
+      } catch {
+        Warn "Existing FFmpeg archive could not be extracted; it will be left untouched and a fresh copy downloaded."
+        $useDownload = $true
+        $extracted = Join-Path $tmpExtract "download-extracted"
+      }
+    }
+    if ($useDownload) {
+      $download = Join-Path $tmpExtract "ffmpeg.zip"
+      Download-FFmpegZip $download
+      Expand-Archive -Path $download -DestinationPath $extracted -Force
+    }
 
-    # Retry exactly once
-    if (Test-Path $tmpExtract) { Remove-Item -Recurse -Force $tmpExtract }
-    New-Item -ItemType Directory -Force -Path $tmpExtract | Out-Null
+    $foundFfmpeg  = Get-ChildItem -Path $extracted -Recurse -Filter "ffmpeg.exe"  -File | Select-Object -First 1
+    $foundFfprobe = Get-ChildItem -Path $extracted -Recurse -Filter "ffprobe.exe" -File | Select-Object -First 1
 
-    Expand-Archive -Path $FfmpegZip -DestinationPath $tmpExtract -Force
-    $extractedOk = $true
+    if (-not $foundFfmpeg -or -not $foundFfprobe) {
+      throw "FFmpeg extracted but ffmpeg.exe/ffprobe.exe not found."
+    }
+
+    Copy-Item -Force $foundFfmpeg.FullName  $ffmpegExe
+    Copy-Item -Force $foundFfprobe.FullName $ffprobeExe
+  } finally {
+    Remove-Item -Recurse -Force $tmpExtract
   }
-
-  if (-not $extractedOk) {
-    throw "Failed to extract FFmpeg zip."
-  }
-
-  $foundFfmpeg  = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffmpeg.exe"  -File | Select-Object -First 1
-  $foundFfprobe = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffprobe.exe" -File | Select-Object -First 1
-
-  if (-not $foundFfmpeg -or -not $foundFfprobe) {
-    throw "FFmpeg extracted but ffmpeg.exe/ffprobe.exe not found."
-  }
-
-  Copy-Item -Force $foundFfmpeg.FullName  $ffmpegExe
-  Copy-Item -Force $foundFfprobe.FullName $ffprobeExe
-
-  Remove-Item -Recurse -Force $tmpExtract
   Info "Local FFmpeg ready: $FfmpegBin"
 }
 
@@ -194,35 +231,25 @@ function Write-VenvMode([string]$mode) {
 }
 
 function Ensure-Venv([string]$mode) {
-  $needRecreate = $false
-
   if (Test-Path $VenvDir) {
     $py = Join-Path $VenvDir "Scripts\python.exe"
     if (-not (Test-Path $py)) {
-      Warn "Existing venv is broken (python.exe missing). Will recreate."
-      $needRecreate = $true
+      throw "Existing venv is missing python.exe. Inspect or remove it manually before installing."
     } else {
       $oldMode = Read-ExistingVenvMode
       if ($oldMode -and ($oldMode -ne $mode)) {
-        Warn "Existing venv mode '$oldMode' != requested '$mode'. Will recreate."
-        $needRecreate = $true
+        throw "Existing venv uses '$oldMode' mode, not '$mode'. Back up or remove it manually before switching modes."
       }
     }
-  }
-
-  if ($needRecreate -and (Test-Path $VenvDir)) {
-    Warn "Removing existing venv..."
-    Remove-Item -Recurse -Force $VenvDir
   }
 
   if (-not (Test-Path $VenvDir)) {
     Info "Creating venv..."
     & python -m venv $VenvDir
+    if ($LASTEXITCODE -ne 0) { throw "Virtual environment creation failed (exit code $LASTEXITCODE)." }
   } else {
     Info "venv already exists."
   }
-
-  Write-VenvMode $mode
 }
 
 function Pip-Upgrade([string]$py) {
@@ -239,7 +266,7 @@ function Install-Locked([string]$py) {
 
 function Install-CudaWheels([string]$py) {
   Info "Installing CUDA runtime wheels (for CUDA mode)..."
-  & $py -m pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12
+  & $py -m pip install "nvidia-cuda-runtime-cu12==12.9.79" "nvidia-cublas-cu12==12.9.1.4" "nvidia-cudnn-cu12==9.18.1.3"
   if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
 }
 
@@ -247,7 +274,8 @@ function Remove-CudaWheels([string]$py) {
   Info "Ensuring CPU mode: removing CUDA runtime wheels if present..."
   $pkgs = @("nvidia-cuda-runtime-cu12","nvidia-cublas-cu12","nvidia-cudnn-cu12")
   foreach ($p in $pkgs) {
-    try { & $py -m pip uninstall -y $p | Out-Null } catch {}
+    & $py -m pip uninstall -y $p | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to remove $p (exit code $LASTEXITCODE)." }
   }
 }
 
@@ -255,13 +283,13 @@ function Install-TorchForMode([string]$py, [string]$mode) {
   if ($mode -eq "cpu") {
     Info "Installing torch/torchaudio (CPU) from official PyTorch index..."
     & $py -m pip install --upgrade --force-reinstall `
-      "torch>=$MinTorchVersion" "torchaudio>=$MinTorchVersion" `
+      "torch==$TorchVersion" "torchaudio==$TorchVersion" `
       --index-url $TorchIndexCPU
       if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
   } else {
     Info "Installing torch/torchaudio (CUDA) from official PyTorch cu126 index..."
     & $py -m pip install --upgrade --force-reinstall `
-      "torch>=$MinTorchVersion" "torchaudio>=$MinTorchVersion" `
+      "torch==$TorchVersion" "torchaudio==$TorchVersion" `
       --index-url $TorchIndexCUDA
       if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
   }
@@ -270,6 +298,7 @@ function Install-TorchForMode([string]$py, [string]$mode) {
 function Torch-Smoke([string]$py) {
   Info "Torch smoke-check..."
   & $py -c "import torch; print('torch', torch.__version__); print('cuda_available', torch.cuda.is_available()); print('cuda_version', torch.version.cuda)" | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "Torch smoke check failed (exit code $LASTEXITCODE)." }
 }
 
 function Torch-CudaAvailable([string]$py) {
@@ -286,6 +315,11 @@ function Install-Project([string]$py) {
 
   Info "Running pip check..."
   & $py -m pip check
+  if ($LASTEXITCODE -ne 0) { throw "Dependency check failed (exit code $LASTEXITCODE)." }
+
+  Info "Checking application and model imports..."
+  & $py -c "from OpenEduVoice.app import main; from OpenEduVoice.core.translation.nllb_model import NLLBTranslator; from faster_whisper import WhisperModel; from TTS.api import TTS"
+  if ($LASTEXITCODE -ne 0) { throw "Application import check failed (exit code $LASTEXITCODE)." }
 }
 
 try {
@@ -302,13 +336,12 @@ try {
   Ensure-RequirementsFiles
   Validate-LockFile
   Ensure-FFmpegLocal
+  $env:Path = "$FfmpegBin;$env:Path"
   Ensure-Venv $Accel
 
   $py = VenvPython
 
   Pip-Upgrade $py
-
-  Install-Locked $py
 
   if ($Accel -eq "cuda") {
     Install-CudaWheels $py
@@ -322,7 +355,7 @@ try {
       Warn "Falling back to CPU torch so the app can run."
       Remove-CudaWheels $py
       Install-TorchForMode $py "cpu"
-      Write-VenvMode "cpu"
+      $Accel = "cpu"
       Torch-Smoke $py
     }
   } else {
@@ -331,7 +364,13 @@ try {
     Torch-Smoke $py
   }
 
+  Install-Locked $py
   Install-Project $py
+  Ensure-TesseractLocal
+  Info "Downloading default translation, transcription and speech models..."
+  & $py (Join-Path $PSScriptRoot "download_models.py")
+  if ($LASTEXITCODE -ne 0) { throw "Model download failed (exit code $LASTEXITCODE). Retry the installer." }
+  Write-VenvMode $Accel
 
   Info "Install step finished."
   exit 0

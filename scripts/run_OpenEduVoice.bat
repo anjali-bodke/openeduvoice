@@ -1,6 +1,6 @@
 @echo off
 title OpenEduVoice - Run
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo ==========================================
 echo   OpenEduVoice Launcher
@@ -23,11 +23,12 @@ echo [INFO] Starting OpenEduVoice...
 echo.
 
 REM --- Run PowerShell runner ---
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/run_OpenEduVoice.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run_OpenEduVoice.ps1"
+set "exitcode=%errorlevel%"
 
 echo.
 echo ==========================================
-echo OpenEduVoice finished or exited.
+echo OpenEduVoice finished with exit code %exitcode%.
 echo ==========================================
 pause
-
+exit /b %exitcode%

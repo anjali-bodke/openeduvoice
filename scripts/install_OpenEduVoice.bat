@@ -2,7 +2,7 @@
 setlocal
 
 REM Always run from repo root
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 REM One-click default: auto-detect (NVIDIA GPU + driver -> CUDA, else CPU)
 REM Optional override:
@@ -11,7 +11,7 @@ REM   install_OpenEduVoice.bat cuda
 set "ACCEL=%~1"
 if "%ACCEL%"=="" set "ACCEL=auto"
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install_OpenEduVoice.ps1" -Accel "%ACCEL%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_OpenEduVoice.ps1" -Accel "%ACCEL%"
 set exitcode=%errorlevel%
 
 if not %exitcode%==0 (

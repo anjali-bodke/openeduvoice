@@ -15,6 +15,8 @@ function Warn($m) { Write-Host "[WARN]  $m" -ForegroundColor Yellow }
 function Err ($m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
 
 $RepoRoot  = Resolve-Path (Join-Path $PSScriptRoot "..")
+. (Join-Path $PSScriptRoot "runtime_environment.ps1")
+Set-OpenEduVoiceEnvironment $RepoRoot
 $VenvDir   = Join-Path $RepoRoot "venv"
 
 $FfmpegBin  = Join-Path $RepoRoot "tools\ffmpeg\bin"
@@ -85,10 +87,10 @@ print(";".join(sorted(bins)))
 }
 
 function SmokeCheckImports([string]$py) {
-  Info "Checking OpenEduVoice import..."
-  & $py -c "import OpenEduVoice; print('OpenEduVoice import OK')" | Out-Host
+  Info "Checking application imports..."
+  & $py -c "from OpenEduVoice.app import main; from OpenEduVoice.core.translation.nllb_model import NLLBTranslator; from faster_whisper import WhisperModel; from TTS.api import TTS; print('Application imports OK')" | Out-Host
   if ($LASTEXITCODE -ne 0) {
-    throw "OpenEduVoice is not installed in this virtual environment. Run install_OpenEduVoice.bat first."
+    throw "Application dependencies are missing or broken. Run scripts\install_OpenEduVoice.bat first."
   }
 }
 
@@ -104,6 +106,7 @@ function TorchCudaAvailable([string]$py) {
 function Launch([string]$py) {
   Info "Launching GUI..."
   & $py -m OpenEduVoice
+  if ($LASTEXITCODE -ne 0) { throw "OpenEduVoice exited with code $LASTEXITCODE." }
 }
 
 try {
@@ -125,6 +128,9 @@ try {
   $py = VenvPython
   Ensure-FFmpegAvailable
   SmokeCheckImports $py
+  if (-not (Test-Path (Join-Path $RepoRoot "tools\tesseract\tesseract.exe"))) {
+    Warn "Local Tesseract is missing; scanned PDFs require OCR. Rerun scripts\install_OpenEduVoice.bat."
+  }
 
   if ($Accel -eq "cuda") {
     if (-not (TorchCudaAvailable $py)) {
