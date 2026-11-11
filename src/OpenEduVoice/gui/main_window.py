@@ -194,6 +194,17 @@ class App:
             chk.grid(row=i // 2, column=i % 2, sticky="w", padx=10, pady=2)
             self.steps_vars[label] = (var, method)
 
+        presets_frame = tk.Frame(step_frame)
+        presets_frame.grid(row=4, column=0, columnspan=2, sticky="w", padx=10, pady=4)
+        tk.Button(
+            presets_frame, text="Select PDF workflow", command=self.select_pdf_workflow
+        ).pack(side="left", padx=(0, 5))
+        tk.Button(
+            presets_frame,
+            text="Select PPTX + audio workflow",
+            command=self.select_pptx_workflow,
+        ).pack(side="left")
+
         # 3. Language & TTS settings
         lang_frame = tk.LabelFrame(self.root, text="3. Language Settings", font=default_font)
         lang_frame.pack(fill="x", padx=10, pady=5)
@@ -268,6 +279,16 @@ class App:
 
     # ====== UI Actions ======
 
+    def select_pdf_workflow(self):
+        """Select only the PDF translation step; the user still starts the run."""
+        for name, (var, _) in self.steps_vars.items():
+            var.set(name == "Translate PDF")
+
+    def select_pptx_workflow(self):
+        """Select the existing PPTX text and audio steps."""
+        for name, (var, _) in self.steps_vars.items():
+            var.set(name != "Translate PDF")
+
     def browse_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("PowerPoint files", "*.pptx")])
         if file_path:
@@ -291,6 +312,9 @@ class App:
         
         self.progress_bar["value"] = 0
         selected_steps = [(name, method) for name, (var, method) in self.steps_vars.items() if var.get()]
+        if not selected_steps:
+            self.log_and_output("[WARN] Select at least one step to run.")
+            return
         total = max(1, len(selected_steps))
         self.progress_bar["maximum"] = total
         self.ui_progress(0)
@@ -323,7 +347,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Extract + Convert Audio", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -347,7 +371,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Translate PDF", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -363,7 +387,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Extract Slide Text", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -379,7 +403,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Transcribe Audio", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -396,7 +420,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Translate Audio Transcripts", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -413,7 +437,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Translate Slide Text", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -461,7 +485,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Generate TTS Audio", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
@@ -486,7 +510,7 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Reintegrate Text and Audio", e)
-            finally:
+            else:
                 if on_complete:
                     self.root.after(0, on_complete)
 
