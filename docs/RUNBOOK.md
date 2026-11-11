@@ -28,14 +28,16 @@ The command should report Python 3.11.x.
 ## 3. Install dependencies
 
 The installer creates the `venv` virtual environment, installs the locked Python
-dependencies and project, and downloads local FFmpeg. CPU mode is the simplest
+dependencies and project, installs local FFmpeg and Tesseract, and downloads the
+default translation, transcription, and speech models. This needs several
+gigabytes of disk space and an internet connection. CPU mode is the simplest
 option for a developer check:
 
 ```powershell
-.\install_OpenEduVoice.bat cpu
+.\scripts\install_OpenEduVoice.bat cpu
 ```
 
-For NVIDIA mode, use `.\install_OpenEduVoice.bat cuda` instead. If `venv` already
+For NVIDIA mode, use `.\scripts\install_OpenEduVoice.bat cuda` instead. If `venv` already
 exists in the other mode, back it up or remove it manually before switching; the
 installer will not replace it. The installer selects the required PyTorch
 variant for the requested mode.
@@ -50,6 +52,7 @@ Run these commands from the repository folder:
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 .\tools\ffmpeg\bin\ffmpeg.exe -version
 .\tools\ffmpeg\bin\ffprobe.exe -version
+.\tools\tesseract\tesseract.exe --list-langs
 ```
 
 - `pip check` reports incompatible or missing installed package requirements.
@@ -59,17 +62,23 @@ Run these commands from the repository folder:
   guarantee that every document or model result is correct.
 - FFmpeg and FFprobe should print their version information. If either executable
   is missing, rerun the installer and review its error output.
+- Tesseract should list both `eng` and `deu`.
 
-Scanned-PDF workflows also require Tesseract OCR and the relevant trained data;
-see the [PDF translation guide](PDF_TRANSLATION.md).
+The installer sets up project-local Tesseract OCR and English/German trained
+data; see the [PDF translation guide](PDF_TRANSLATION.md).
+The UB Mannheim installer can update Windows installation metadata even when
+installed locally. Its uninstaller removes the entire Tesseract installation
+directory; do not keep unrelated files there. The setup checks the published
+installer's SHA-256 before running it.
 
 ## 5. Launch
 
 ```powershell
-.\run_OpenEduVoice.bat
+.\scripts\run_OpenEduVoice.bat
 ```
 
-On first use, translation and speech models may need to download. Try a small
+The installer downloads default models into `models`; alternate models may
+still need a download. Try a small
 copy of a PPTX or PDF, then inspect the application log and generated files to
 evaluate the output. See the [project guide](PROJECT_GUIDE.md) for workflow
 details and limitations.

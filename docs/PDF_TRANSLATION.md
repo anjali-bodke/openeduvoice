@@ -18,10 +18,10 @@ exactly.
 3. Select **Translate PDF** and run the selected step.
 4. Review the translated PDF and the accompanying per-page text files.
 
-For scanned documents, install Tesseract OCR separately on Windows, make
-`tesseract.exe` available on `PATH`, and install both English (`eng`) and German
-(`deu`) trained data. The app reports an actionable error if the executable or
-requested language data is unavailable. Selectable-text PDFs do not require Tesseract.
+The Windows installer installs Tesseract and the English (`eng`) and German
+(`deu`) trained data under `tools\tesseract`. The launcher adds it to `PATH`.
+The app reports an actionable error if the executable or requested language data
+is unavailable. Selectable-text PDFs do not require Tesseract.
 
 ## Output
 
@@ -112,8 +112,8 @@ before relying on it.
 
 ### Tesseract executable not found
 
-Install Tesseract OCR for Windows and ensure a fresh terminal can resolve
-`tesseract.exe` on `PATH`. Restart OpenEduVoice after changing `PATH`.
+Rerun the installer and check that `tools\tesseract\tesseract.exe` exists.
+Start the application using the launcher, which adds it to `PATH`.
 
 ### Tesseract language data missing
 
@@ -134,8 +134,8 @@ translation, overlapping blocks, or a complex layout may require manual editing.
 
 ### Translation or model initialization fails
 
-Check the full application log for the NLLB error. On first use, the model may
-need to download; after that, inference can run offline. Confirm that the selected
+Check the full application log for the NLLB error. The installer downloads the
+default model, but a different model may still need a download. Confirm that the selected
 language direction is German-English and that the Python environment has the
 locked project dependencies installed.
 

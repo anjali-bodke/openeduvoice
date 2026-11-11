@@ -101,9 +101,14 @@ troubleshooting steps are documented in [PDF translation](PDF_TRANSLATION.md).
 - [`constants.py`](../src/OpenEduVoice/config/constants.py) contains shared TTS
   and pipeline settings.
 - [`install_OpenEduVoice.ps1`](../scripts/install_OpenEduVoice.ps1) installs the
-  locked Python dependencies, selects CPU/CUDA PyTorch, and installs the project.
+  pinned dependencies from [`requirements.lock.txt`](../requirements.lock.txt),
+  selects CPU/CUDA PyTorch wheels, installs the project and Tesseract, and
+  downloads the default models.
 - [`run_OpenEduVoice.ps1`](../scripts/run_OpenEduVoice.ps1) checks the venv and
-  FFmpeg, configures CUDA DLL paths when applicable, and launches the GUI.
+  FFmpeg and application imports, configures model caches and CUDA DLL paths,
+  and launches the GUI.
+- [`runtime_environment.ps1`](../scripts/runtime_environment.ps1) sets local
+  cache paths consistently for installation and launch.
 - The supported Python version is 3.11, as specified by
   [`pyproject.toml`](../pyproject.toml) and the installer.
 
@@ -139,19 +144,25 @@ overlap or group separate content can cover nearby text. OCR replacement paints
 white rectangles over scanned text and cannot restore a textured background.
 Translated text may not fit. Review the per-page text files and the final PDF.
 
-### OCR and model setup are separate prerequisites
+### OCR and model setup are separate from Python packages
 
 `pytesseract` is a Python wrapper, not the Tesseract executable or trained data.
-NLLB model weights are also separate from Python package installation and may need
-to be downloaded on first use. Check both dependencies independently when
-initialization fails.
+The installer installs the Windows Tesseract build and language data separately
+and downloads the default NLLB, Whisper, and speech models into `models`.
+Check each dependency independently when initialization fails. Changing the
+hardware or selecting a different model can require additional downloads.
 
-### Installers and documentation can drift
+### Dependency files and accelerator mode
 
-The PowerShell install script reads `requirements.lock.txt`, while the repository
-also has an additional full lock file. Changes to dependencies must update the
-actual file used by the installer and the project manifest. Verify the root
-installer path referenced by the README and launcher exists in the checkout.
+[`pyproject.toml`](../pyproject.toml) declares direct package dependencies;
+[`requirements.lock.txt`](../requirements.lock.txt) pins the non-PyTorch
+installation set. The installer separately pins PyTorch and torchaudio in
+`install_OpenEduVoice.ps1` because CPU and CUDA wheels use different package
+indexes. The lock is not a complete, hash-verified lock for all platforms.
+When updating dependencies, validate the manifest, the lock, and both accelerator
+wheel selections together. The installer refuses to replace an existing virtual
+environment when its recorded accelerator mode differs: back it up or remove it
+manually before switching.
 
 ## Debugging steps
 
@@ -176,8 +187,7 @@ installer path referenced by the README and launcher exists in the checkout.
    PowerShell window:
 
    ```powershell
-   Get-Command tesseract
-   tesseract --list-langs
+   .\tools\tesseract\tesseract.exe --list-langs
    ```
 
    Confirm `eng` and `deu` appear and that the selected direction's source language
@@ -204,7 +214,8 @@ installer path referenced by the README and launcher exists in the checkout.
 - Preserve the PPTX one-line-per-paragraph mapping contract.
 - Keep long NLLB inputs chunked and create a translator once per document/workflow.
 - Report missing executables, language data, and model failures explicitly.
-- Update dependency manifests and the installer-consumed lock file together.
+- Update the project manifest, installer-consumed lock, and accelerator wheel
+  versions together when applicable.
 - Add focused tests for extraction, translation orchestration, output generation,
   and failure paths.
 - Review generated documents visually; text-only unit tests cannot validate layout.

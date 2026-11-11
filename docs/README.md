@@ -6,5 +6,6 @@
   known risks, and debugging steps.
 - [Developer runbook](RUNBOOK.md): source setup, dependency installation,
   pre-launch checks, and running the application on Windows.
+- [NVIDIA GPU setup](NvidiaCuda_Installation.md): driver and CUDA setup guidance.
 
 The root [README](../README.md) contains the project summary and Windows quick start.

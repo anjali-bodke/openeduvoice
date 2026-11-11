@@ -17,14 +17,16 @@ The **OpenEduVoice** supports:
 - PowerPoint audio extraction, transcription, translation, text-to-speech, and reintegration
 - German-English translation of digital and scanned PDFs
 
-First-time installation downloads all the dependencies/models; after that, processing runs offline.
-All the processing is **fully offline** once models are downloaded.
+First-time installation downloads dependencies and the default models. Processing
+can run offline after setup succeeds; selecting a different model may require a
+further download.
 
 ## Documentation
 
 - [PDF translation: setup, decisions, and limitations](docs/PDF_TRANSLATION.md)
 - [Project idea, technical walkthrough, known risks, and debugging](docs/PROJECT_GUIDE.md)
 - [Developer runbook: source setup, dependency installation, checks, and launch](docs/RUNBOOK.md)
+- [NVIDIA GPU setup](docs/NvidiaCuda_Installation.md)
 - [Documentation index](docs/README.md)
 
 ---
@@ -97,11 +99,25 @@ git clone https://github.com/anjali-bodke/openeduvoice.git
 
 - (Optional) Install Git for future use: https://github.com/git-for-windows/git/releases/download/v2.52.0.windows.1/Git-2.52.0-64-bit.exe
 
-### 2. Launch the Application.
-- Open the project folder
-- There are two files.
-   - File 1. **install_OpenEduVoice.bat**. Please click on this file, if you have dowloaded the porgram for first time. This file will ensure all dependecies are installed.
-   - File 2. **run_OpenEduVoice.bat**. This file will give a final check, run the application and then open the GUI.
+### 2. Install and launch
+
+Open the `scripts` folder and double-click **install_OpenEduVoice.bat**. When
+installation succeeds, double-click **run_OpenEduVoice.bat** to start the app.
+The installer downloads several gigabytes of models and dependencies, installs
+Tesseract, and requires an internet connection and sufficient disk space.
+
+The installer selects CPU or NVIDIA CUDA automatically. To choose explicitly,
+run `.\scripts\install_OpenEduVoice.bat cpu` or `.\scripts\install_OpenEduVoice.bat cuda` from
+PowerShell. If an existing virtual environment was installed in a different mode,
+the installer stops rather than deleting it; back up or remove `venv` manually
+before switching. Models are stored under `models`, Python packages under `venv`,
+and FFmpeg and Tesseract under `tools`. Python itself and the NVIDIA driver
+remain system prerequisites.
+
+Direct Python dependencies are declared in `pyproject.toml`; the Windows installer
+uses `requirements.lock.txt` and separately selects CPU or CUDA PyTorch wheels.
+The installer uses the UB Mannheim Windows build of Tesseract for scanned PDFs;
+see the [PDF setup guide](docs/PDF_TRANSLATION.md).
 
 ### 3. Utilize GUI to test out the project
 
@@ -114,17 +130,20 @@ git clone https://github.com/anjali-bodke/openeduvoice.git
 3. Confirm the AI acknowledgement and select **Run Selected Steps**. Inspect the
    log and review the generated document; layout preservation is approximate.
 
-All output will be stored in:
+PowerPoint intermediate output is stored beside the presentation:
 ```
 YourFile_transcript/
 ├── media/                                   # Extracted audio
 ├── converted_wav/                           # Converted .wav files
 ├── transcripts/                             # Whisper transcripts
-├── translated/                              # NLLB-200 based translated text
+├── slide_text_txt/                          # Extracted slide paragraphs
+├── translated_text/                         # Translated audio transcripts
+├── translated_text_txt/                     # Translated slide paragraphs
 ├── tts_audio/                               # Coqui-regenerated speech
-└── {original_name}_combined.pptx            #Presentation with translated Audio
 ```
+The final presentation is saved beside the input as
+`{original_name}_final_combined.pptx`. PDF output locations are described in the
+[PDF guide](docs/PDF_TRANSLATION.md).
 ---
 
-## Initially, If you don't have a Nvidia GPU or CUDA toolkit installed it will work only on CPU.
-## Inorder to install CUDA toolkit and use GPU for the software please follow the instructions [Nvidia-Toolkit Installation Guide](NvidiaCuda_Installation.md)
+For GPU setup, see the [NVIDIA GPU guide](docs/NvidiaCuda_Installation.md).
