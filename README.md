@@ -4,23 +4,27 @@
   <img src="assets/logo.png" alt="Project Logo" width="200"/>
 </p>
 
-An **offline Windows desktop application** that automates **audio extraction, transcription, translation, text-to-speech (TTS), and reintegration** for PowerPoint (`.pptx`) files.  
-Designed for **educational use** and **non-technical users**.
+An **offline Windows desktop application** for translating educational documents.
+Its PowerPoint workflow handles embedded audio and slide text; its PDF workflow
+translates digital and scanned documents.
 
 ---
 
 ## Overview
 
-The **OpenEduVoice** enables multilingual transformation of PowerPoint presentations by:
+The **OpenEduVoice** supports:
 
-- Extracting embedded audio and slide text
-- Transcribing spoken content using Whisper
-- Translating text using NLLB models
-- Regenerating speech via TTS
-- Reintegrating translated text and audio back into the original presentation
+- PowerPoint audio extraction, transcription, translation, text-to-speech, and reintegration
+- German-English translation of digital and scanned PDFs
 
 First-time installation downloads all the dependencies/models; after that, processing runs offline.
 All the processing is **fully offline** once models are downloaded.
+
+## Documentation
+
+- [PDF translation: setup, decisions, and limitations](docs/PDF_TRANSLATION.md)
+- [Project idea, technical walkthrough, known risks, and debugging](docs/PROJECT_GUIDE.md)
+- [Documentation index](docs/README.md)
 
 ---
 
@@ -55,14 +59,9 @@ All the processing is **fully offline** once models are downloaded.
 
 ## System Architecture (High Level)
 
-- **GUI Layer**
-  - Handles user interaction and step control
-- **Core Pipeline**
-  - Extraction, transcription, translation, TTS, reintegration
-- **Utilities**
-  - Logging, preprocessing, cleanup, FFmpeg helpers
-- **Packaging Layer**
-  - Python package and Windows executable (in progress)
+The application separates its Tkinter GUI from document extraction, translation,
+audio processing, and reintegration modules. For the file-by-file walkthrough and
+workflow details, see the [project guide](docs/PROJECT_GUIDE.md).
 
 ---
 
