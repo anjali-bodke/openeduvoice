@@ -24,6 +24,7 @@ All the processing is **fully offline** once models are downloaded.
 
 - [PDF translation: setup, decisions, and limitations](docs/PDF_TRANSLATION.md)
 - [Project idea, technical walkthrough, known risks, and debugging](docs/PROJECT_GUIDE.md)
+- [Developer runbook: source setup, dependency installation, checks, and launch](docs/RUNBOOK.md)
 - [Documentation index](docs/README.md)
 
 ---

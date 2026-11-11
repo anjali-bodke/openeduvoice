@@ -4,5 +4,7 @@
   design decisions, and current limitations.
 - [Project guide](PROJECT_GUIDE.md): project goals, architecture, processing flows,
   known risks, and debugging steps.
+- [Developer runbook](RUNBOOK.md): source setup, dependency installation,
+  pre-launch checks, and running the application on Windows.
 
 The root [README](../README.md) contains the project summary and Windows quick start.
