@@ -149,6 +149,8 @@ python -m unittest discover -s tests -v
 python -m compileall -q src tests
 ```
 
-Unit tests mock OCR and NLLB. They do not prove OCR quality on real scans or validate
-real model translations; test representative PDFs with Tesseract installed and
-visually inspect their outputs.
+The tests generate real PDF fixtures for selectable text, styled spans, image-only
+scans, mixed content, multiple pages, rotated pages, encrypted inputs, and text
+overflow. OCR responses and NLLB translations are mocked, so the suite does not prove
+OCR quality on real scans or validate model translations. Test representative PDFs
+with Tesseract installed and visually inspect their outputs.
