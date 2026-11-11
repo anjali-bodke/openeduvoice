@@ -104,15 +104,14 @@ git clone https://github.com/anjali-bodke/openeduvoice.git
 
 ### 3. Utilize GUI to test out the project
 
-1. Select a `.pptx` file
+1. Select a `.pptx` or `.pdf` file and choose the translation direction.
 
-2. Choose the step to be performed:
-   - Extract Audio
-   - Convert to WAV
-   - Transcribe
-   - Translate Text
-   - Generate TTS Audio
-   - Reintegrate
+2. Use **Select PDF workflow** or **Select PPTX + audio workflow** to choose
+   steps, or select individual steps manually. The PPTX preset includes audio
+   processing and is intended for presentations with embedded audio.
+
+3. Confirm the AI acknowledgement and select **Run Selected Steps**. Inspect the
+   log and review the generated document; layout preservation is approximate.
 
 All output will be stored in:
 ```

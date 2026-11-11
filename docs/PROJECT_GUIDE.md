@@ -30,7 +30,16 @@ is supported but may be slow.
   thread.
 
 The selected-step runner calls one workflow at a time and advances using each
-workflow's completion callback.
+workflow's success callback. An exception raised by a step is logged and stops the
+selected sequence. Some older audio functions handle errors internally, so check
+the logs and generated files even if the sequence finishes.
+
+For a quick test, use **Select PDF workflow** or **Select PPTX + audio workflow**,
+choose the corresponding input and language direction, acknowledge the AI
+disclaimer, and select **Run Selected Steps**. Presets only select checkboxes;
+they do not start processing. The PPTX preset includes audio extraction,
+transcription, translation, and TTS: it is intended for presentations with
+embedded audio. Users can change the selected steps before running.
 
 ### PowerPoint workflow
 
@@ -52,6 +61,25 @@ workflow's completion callback.
 
 Outputs are organized under a sibling `{presentation}_transcript` directory.
 PPTX slide text, translated transcripts, and generated audio use separate directories.
+
+#### PowerPoint translation decisions and limitations
+
+- Each extracted paragraph is represented by one line, including trailing empty
+  paragraphs. Model output is kept on one line to avoid shifting later paragraphs.
+- Long slide text is sent to the translator, which performs its own bounded
+  chunking. Non-alphabetic lines and path-like text intentionally skipped by the
+  existing heuristic retain their original content; path-like skips are logged.
+- Model initialization, empty translations, and per-file translation failures now
+  stop the step instead of writing an empty translation. Existing output from an
+  earlier run is not removed on failure; do not treat it as a new result.
+- Bibliography hallucination filtering retains a source line in place of a
+  rejected translation so later paragraphs do not shift.
+- Extraction and reintegration currently use different XML traversal strategies,
+  and reintegration chooses between run and paragraph matching heuristically.
+  Complex slides, tables, styled runs, bullets, line breaks, and math may therefore
+  be mapped incorrectly or lose formatting. Review every output presentation;
+  layout and styling preservation are not guaranteed. No end-to-end PPTX
+  reintegration or real-model quality test is currently provided.
 
 ### PDF workflow
 
@@ -84,13 +112,12 @@ troubleshooting steps are documented in [PDF translation](PDF_TRANSLATION.md).
 These are known risks to consider during changes and debugging; some are current
 design limitations rather than confirmed failures in every document.
 
-### Workflow runner can continue after an error
+### Some underlying audio steps can report errors without raising
 
-GUI workflow methods log caught exceptions and invoke their completion callback in
-`finally`. The selected-step runner then starts the next step. A later workflow
-could therefore consume stale or missing output after an earlier step failed.
-When debugging, read the first error in the log, not only the final "completed"
-message.
+The GUI stops the selected sequence when a step raises an exception. Some older
+audio functions may log failures and return normally, which the runner cannot
+distinguish from success. Check the first error and verify the outputs, not only
+the final completion message.
 
 ### PPTX input state is independent of PDF input state
 
@@ -167,8 +194,8 @@ installer path referenced by the README and launcher exists in the checkout.
 9. **For PPTX mapping issues**, compare the extracted slide text line count/order
    with the slide XML and inspect reintegration logs. Preserve the one-line-per-
    paragraph contract when changing extraction or translation.
-10. **Distinguish step completion from success.** The GUI can report that all
-    selected steps finished even if an earlier step logged an error. Verify that
+10. **Distinguish step completion from success.** Some underlying audio steps
+    can log an error without raising it. Verify that
     the expected output files exist and inspect their contents.
 
 ## Change checklist
