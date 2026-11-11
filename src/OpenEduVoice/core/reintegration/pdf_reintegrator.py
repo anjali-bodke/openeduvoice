@@ -24,7 +24,8 @@ def _bounded_rect(page: fitz.Page, block: PDFTextBlock) -> fitz.Rect:
     rect.y0 -= 0.5
     rect.x1 += 0.5
     rect.y1 += 0.5
-    return rect & page.rect
+    # Text extraction coordinates are unrotated; page.rect rotates with the page.
+    return rect & page.cropbox
 
 
 def _visible_color(color: tuple[float, float, float]) -> tuple[float, float, float]:
