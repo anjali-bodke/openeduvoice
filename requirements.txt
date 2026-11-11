@@ -9,6 +9,10 @@ python-pptx
 pydub
 ffmpeg-python
 
+# PDF translation
+PyMuPDF
+pytesseract
+
 # Utilities
 numpy
 scipy

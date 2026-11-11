@@ -91,6 +91,47 @@ def chunk_by_punctuation(text: str, max_len: int = 400) -> List[str]:
     return chunks
 
 
+def split_text_by_sentences(text: str, max_chars: int = 400) -> List[str]:
+    """
+    Split text into bounded chunks, preferring sentence and word boundaries.
+    """
+    if max_chars < 1:
+        raise ValueError("max_chars must be greater than zero.")
+
+    sentences = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    chunks: List[str] = []
+    current = ""
+
+    for sentence in sentences:
+        if not sentence:
+            continue
+        if len(sentence) > max_chars:
+            if current:
+                chunks.append(current.strip())
+                current = ""
+            remainder = sentence
+            while len(remainder) > max_chars:
+                split_at = remainder.rfind(" ", 0, max_chars + 1)
+                if split_at <= 0:
+                    split_at = max_chars
+                chunks.append(remainder[:split_at].strip())
+                remainder = remainder[split_at:].strip()
+            if remainder:
+                chunks.append(remainder)
+            continue
+
+        if len(current) + len(sentence) <= max_chars:
+            current = (current + " " + sentence).strip() if current else sentence
+        else:
+            if current:
+                chunks.append(current.strip())
+            current = sentence
+
+    if current:
+        chunks.append(current.strip())
+    return chunks
+
+
 def minimal_clean(text: str) -> str:
     """
     Backwards-compatible light cleanup used by TTS:

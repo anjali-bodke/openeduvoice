@@ -5,9 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "OpenEduVoice"
 version = "0.1.0"
-description = "Offline PowerPoint audio + slide text transcription/translation/TTS tool"
+description = "Offline PowerPoint audio and PDF translation, transcription, and TTS tool"
 requires-python = ">=3.11,<3.12"
-dependencies = []
+dependencies = [
+    "PyMuPDF>=1.26.7,<2.0",
+    "pytesseract>=0.3.13,<0.4",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

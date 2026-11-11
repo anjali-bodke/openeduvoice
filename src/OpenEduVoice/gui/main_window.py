@@ -22,6 +22,7 @@ from OpenEduVoice.core.translation.translator_interface import (
     translate_transcript_files,
     translate_text_files,
 )
+from OpenEduVoice.core.translation.pdf_translator import translate_pdf
 from OpenEduVoice.core.audio.tts_generator import text_to_speech
 from OpenEduVoice.core.audio.audio_converter import convert_audio_to_wav
 from OpenEduVoice.core.reintegration.reintegrator_all import reintegrate_text_and_audio
@@ -41,10 +42,11 @@ class App:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("Audio PowerPoint Automation Tool")
-        self.root.geometry("700x750")
+        self.root.title("OpenEduVoice - PowerPoint and PDF Translation")
+        self.root.geometry("700x800")
 
         self.pptx_path = tk.StringVar()
+        self.pdf_path = tk.StringVar()
         self.language = tk.StringVar(value="English")
         self.translation_direction = tk.StringVar(value="German to English")
         self.acknowledge_var = tk.BooleanVar(value=False)
@@ -159,6 +161,19 @@ class App:
         tk.Button(file_frame, text="Browse", command=self.browse_file).grid(row=0, column=2, padx=5, pady=5)
         file_frame.columnconfigure(1, weight=1)
 
+        pdf_frame = tk.LabelFrame(self.root, text="PDF Translation Input", font=default_font)
+        pdf_frame.pack(fill="x", padx=10, pady=5)
+        tk.Label(pdf_frame, text="PDF Path:", font=default_font).grid(
+            row=0, column=0, sticky="w", padx=5, pady=5
+        )
+        tk.Entry(pdf_frame, textvariable=self.pdf_path, font=default_font).grid(
+            row=0, column=1, sticky="ew", padx=5, pady=5
+        )
+        tk.Button(pdf_frame, text="Browse", command=self.browse_pdf_file).grid(
+            row=0, column=2, padx=5, pady=5
+        )
+        pdf_frame.columnconfigure(1, weight=1)
+
         # 2. Steps
         step_frame = tk.LabelFrame(self.root, text="2. Select Steps to Run", font=default_font)
         step_frame.pack(fill="x", padx=10, pady=5)
@@ -169,6 +184,7 @@ class App:
                 ("Transcribe", self.transcribe_audio),
                 ("Translate Audio Transcripts", self.translate_text),
                 ("Translate Slide Text (.txt)", self.translate_slide_text_txt),
+                ("Translate PDF", self.translate_pdf_document),
                 ("Generate TTS Audio", self.generate_tts),
                 ("Reintegrate Text and Audio (Combined)", self.reintegrate_text_and_audio_combined),
             ]
@@ -213,7 +229,7 @@ class App:
 
         ack_text = (
             "I understand this software uses AI tools/technology for translation. "
-            "After all steps are completed, I will manually verify all slides before intended use."
+            "After processing, I will manually verify all generated documents before intended use."
         )
 
         tk.Checkbutton(
@@ -258,6 +274,12 @@ class App:
             self.pptx_path.set(file_path)
             self.log_and_output(f"Selected file: {file_path}")
 
+    def browse_pdf_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+        if file_path:
+            self.pdf_path.set(file_path)
+            self.log_and_output(f"Selected PDF: {file_path}")
+
     # ====== Run Steps ======
 
     def run_selected_steps(self):
@@ -301,6 +323,30 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Extract + Convert Audio", e)
+            finally:
+                if on_complete:
+                    self.root.after(0, on_complete)
+
+        self._run_task(task)
+
+    def translate_pdf_document(self, on_complete=None):
+        def task():
+            try:
+                src, tgt = self.get_translation_languages()
+                result = translate_pdf(
+                    Path(self.pdf_path.get()),
+                    src,
+                    tgt,
+                    log_fn=self.log_and_output,
+                )
+                self.log_and_output(f"Translated PDF saved to: {result.translated_pdf}")
+                self.log_and_output(
+                    f"Extracted and translated PDF text saved to: "
+                    f"{result.extracted_text_files[0].parent.parent}"
+                )
+                self.increment_progress()
+            except Exception as e:
+                self.handle_exception("Translate PDF", e)
             finally:
                 if on_complete:
                     self.root.after(0, on_complete)

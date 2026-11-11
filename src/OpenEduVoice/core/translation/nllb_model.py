@@ -17,12 +17,13 @@ Notes:
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
 import torch
 from transformers import NllbTokenizer, AutoModelForSeq2SeqLM
+
+from OpenEduVoice.utils.preprocessing import split_text_by_sentences
 
 
 # Good default for most laptops. Users with larger GPUs can override via config/UI.
@@ -128,27 +129,7 @@ class NLLBTranslator:
         self.model.eval()
 
     def _split_by_sentences(self, text: str, max_chars: int = 400) -> list[str]:
-        """
-        Splits text into ~max_chars chunks using sentence boundaries.
-        """
-        sentences = re.split(r"(?<=[.!?])\s+", (text or "").strip())
-        chunks: list[str] = []
-        current = ""
-
-        for sentence in sentences:
-            if not sentence:
-                continue
-            if len(current) + len(sentence) <= max_chars:
-                current = (current + " " + sentence).strip() if current else sentence
-            else:
-                if current:
-                    chunks.append(current.strip())
-                current = sentence
-
-        if current:
-            chunks.append(current.strip())
-
-        return chunks
+        return split_text_by_sentences(text, max_chars=max_chars)
 
     def translate(self, text: str, max_chars: int = 400, log: Optional[Callable[[str], None]] = None) -> str:
         """
