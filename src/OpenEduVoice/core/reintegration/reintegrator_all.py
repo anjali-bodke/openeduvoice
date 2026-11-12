@@ -272,7 +272,7 @@ def reintegrate_translated_slide_text(pptx_in: Path, txt_dir: Path, pptx_out: Pa
     return modified
 
 # ----------------- public API: AUDIO (unchanged) -----------------
-def reintegrate_audio_to_pptx(pptx_path: Path, tts_dir: Path, log_fn=print, output_fn=print) -> int:
+def reintegrate_audio_to_pptx(pptx_path: Path, tts_dir: Path, log_fn=print) -> int:
     replaced = 0
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -291,8 +291,10 @@ def reintegrate_audio_to_pptx(pptx_path: Path, tts_dir: Path, log_fn=print, outp
                 entry = ET.Element(f"{{{NS_CT}}}Default", Extension="m4a", ContentType="audio/mp4")
                 root.append(entry)
                 tree.write(str(content_types), xml_declaration=True, encoding="utf-8", pretty_print=True)
-        except Exception as e:
-            _log(f"[ERROR] Failed to patch content types: {e}", log_fn)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to patch PowerPoint content types: {exc}"
+            ) from exc
 
         for audio in tts_dir.glob("*.m4a"):
             target = ppt_media_dir / audio.name
@@ -312,7 +314,13 @@ def reintegrate_audio_to_pptx(pptx_path: Path, tts_dir: Path, log_fn=print, outp
     return replaced
 
 # ----------------- combined -----------------
-def reintegrate_text_and_audio(pptx_in: Path, txt_dir: Path, tts_dir: Path, pptx_out: Path, log_fn=print, output_fn=print):
+def reintegrate_text_and_audio(
+    pptx_in: Path,
+    txt_dir: Path,
+    tts_dir: Path,
+    pptx_out: Path,
+    log_fn=print,
+):
     shutil.copy2(pptx_in, pptx_out)
     reintegrate_translated_slide_text(pptx_out, txt_dir, pptx_out, log_fn)
-    reintegrate_audio_to_pptx(pptx_out, tts_dir, log_fn, output_fn)
+    reintegrate_audio_to_pptx(pptx_out, tts_dir, log_fn)

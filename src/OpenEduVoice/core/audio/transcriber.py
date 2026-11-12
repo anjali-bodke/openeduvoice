@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 from OpenEduVoice.utils.logging_utils import safe_log
 
@@ -21,27 +21,6 @@ try:
     from faster_whisper import WhisperModel  # type: ignore
 except Exception:  # pragma: no cover
     WhisperModel = None  # allow tests to monkeypatch
-
-def _cuda_wheels_present() -> bool:
-    """
-    Returns True if pip-installed NVIDIA CUDA wheel DLL dirs exist in this venv.
-    On Windows this is a strong signal that cublas/cudnn DLLs can actually be loaded.
-    """
-    if os.name != "nt":
-        return False
-
-    try:
-        venv_base = Path(sys.executable).parent.parent
-        nvidia_path = venv_base / "Lib" / "site-packages" / "nvidia"
-        candidates = [
-            nvidia_path / "cuda_runtime" / "bin",
-            nvidia_path / "cublas" / "bin",
-            nvidia_path / "cudnn" / "bin",
-        ]
-        return any(p.exists() for p in candidates)
-    except Exception:
-        return False
-
 
 def _torch_cuda_available() -> bool:
     """
@@ -55,11 +34,9 @@ def _torch_cuda_available() -> bool:
         return False
 
 
-def _select_device_and_compute(model_name: str) -> tuple[str, str]:
+def _select_device_and_compute() -> tuple[str, str]:
     """
-    CPU-first default. Only use CUDA when BOTH:
-      - torch says CUDA is available, AND
-      - CUDA wheel DLL folders exist in this venv (Windows)
+    Prefer CUDA when torch reports it as available; otherwise use CPU.
     """
     cuda_ok = _torch_cuda_available()
     if cuda_ok:
@@ -98,15 +75,16 @@ def set_cuda_paths(log_fn: Optional[Callable[[str], None]] = None) -> None:
         for key in ("CUDA_PATH", "CUDA_PATH_V12_4"):
             if key not in os.environ:
                 os.environ[key] = os.pathsep.join(to_prepend)
-        safe_log(log_fn, f"[INFO] CUDA DLL paths appended: {to_prepend}")
+        safe_log(log_fn, f"[INFO] CUDA DLL paths prepended: {to_prepend}")
     except Exception as e:
         safe_log(log_fn, f"[WARN] set_cuda_paths failed (continuing without): {e}")
 
-def _init_model(model_size: str, log_fn: Optional[Callable[[str], None]]) -> "WhisperModel":
+def _init_model(model_size: str, log_fn: Optional[Callable[[str], None]]) -> Any:
     """
     Initialize WhisperModel with:
     - Deterministic device selection:
-        * Use CUDA only if torch reports CUDA available AND CUDA wheel DLLs exist (Windows).
+        * Use CUDA when torch reports CUDA available.
+        * Add local CUDA wheel DLL directories to PATH on Windows when present.
         * Otherwise use CPU.
     - Safety guard: never run large/large-v2 on CUDA (fallback to DEFAULT_WHISPER_MODEL).
     - Graceful fallbacks for compute_type on the chosen device.
@@ -117,7 +95,7 @@ def _init_model(model_size: str, log_fn: Optional[Callable[[str], None]]) -> "Wh
     requested_model = model_size or DEFAULT_WHISPER_MODEL
 
     # Decide device once (do not "try cuda first" on CPU-only machines)
-    device, preferred_compute = _select_device_and_compute(requested_model)
+    device, preferred_compute = _select_device_and_compute()
 
     # Apply large-model guard only for CUDA
     effective_model = requested_model
@@ -188,23 +166,25 @@ def transcribe_audio_files(
     Returns:
         List of saved .txt file paths.
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Only patch CUDA paths if CUDA wheels exist (prevents misleading logs in CPU mode)
-    if _cuda_wheels_present() and _torch_cuda_available():
-        set_cuda_paths(log_fn)
+    if not audio_dir.is_dir():
+        raise ValueError(f"Audio input directory does not exist: {audio_dir}")
 
-    try:
-        model = _init_model(model_size, log_fn)
-    except Exception as e:
-        safe_log(log_fn, f"[ERROR] Could not load Whisper model '{model_size}': {e}")
-        return []
-
-    transcribed_files: List[Path] = []
     wav_files = sorted(audio_dir.glob("*.wav"))
     if not wav_files:
         safe_log(log_fn, f"[INFO] No .wav files found in: {audio_dir}")
-        return transcribed_files
+        return []
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        model = _init_model(model_size, log_fn)
+    except Exception as exc:
+        safe_log(log_fn, f"[ERROR] Could not load Whisper model '{model_size}': {exc}")
+        raise RuntimeError(
+            f"Could not load Whisper model '{model_size}': {exc}"
+        ) from exc
+
+    transcribed_files: List[Path] = []
 
     for wav_file in wav_files:
         try:
@@ -223,8 +203,11 @@ def transcribe_audio_files(
             out_path.write_text(transcript, encoding="utf-8")
             transcribed_files.append(out_path)
             safe_log(log_fn, f"[INFO] Transcribed: {wav_file.name} -> {out_path.name} ({len(transcript)} chars)")
-        except Exception as e:
-            safe_log(log_fn, f"[ERROR] Failed to transcribe {wav_file.name}: {e}")
+        except Exception as exc:
+            safe_log(log_fn, f"[ERROR] Failed to transcribe {wav_file.name}: {exc}")
+            raise RuntimeError(
+                f"Failed to transcribe {wav_file.name}: {exc}"
+            ) from exc
 
     safe_log(log_fn, f"[INFO] Total transcripts written: {len(transcribed_files)}")
     return transcribed_files

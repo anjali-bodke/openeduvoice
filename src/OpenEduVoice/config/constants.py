@@ -13,7 +13,3 @@ TTS_FADE_MS = 10
 AUTO_DEADBAND_SEC = 1.0
 AUTO_DEADBAND_RATIO = 0.03
 AUTO_CLAMP_BOUNDS = (0.50, 1.25)  # (min, max) tempo
-
-# ---- Translation / pipeline ----
-# reserved for future tweaks (line limits, etc.)
-MAX_TRANSLATION_LINE_LEN = 2000
