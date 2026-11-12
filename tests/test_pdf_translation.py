@@ -340,6 +340,8 @@ class PDFTranslationTests(unittest.TestCase):
                 )
 
             self.assertTrue(result.translated_pdf.is_file())
+            self.assertEqual(result.translated_pdf, source_pdf.with_name("lesson_translated.pdf"))
+            self.assertEqual(result.extracted_text_files[0].parent.parent, source_pdf.with_name("lesson_translation"))
             self.assertEqual(result.translated_block_count, 1)
             self.assertEqual(
                 result.extracted_text_files[0].read_text(encoding="utf-8"),
@@ -357,6 +359,43 @@ class PDFTranslationTests(unittest.TestCase):
             self.assertIn("Hello world", translated_text)
             self.assertNotIn("Hallo Welt", translated_text)
             self.assertTrue(page_images)
+
+    def test_selected_output_directory_contains_pdf_and_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "lesson.pdf"
+            destination = Path(temp_dir) / "results"
+            destination.mkdir()
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((30, 50), "Hello")
+            document.save(source)
+            document.close()
+
+            class FakeTranslator:
+                def translate(self, text: str, log=None) -> str:
+                    return "Hallo"
+
+            with patch.object(pdf_translator, "_create_nllb_translator", return_value=FakeTranslator()):
+                result = pdf_translator.translate_pdf(
+                    source, "en", "de", log_fn=lambda _: None, output_dir=destination
+                )
+
+            self.assertEqual(result.translated_pdf, destination / "lesson_translated.pdf")
+            self.assertTrue(result.translated_pdf.is_file())
+            self.assertEqual(result.extracted_text_files[0].parent.parent, destination / "lesson_translation")
+            self.assertEqual(result.translated_text_files[0].read_text(encoding="utf-8"), "Hallo")
+            self.assertFalse(source.with_name("lesson_translated.pdf").exists())
+
+    def test_rejects_missing_output_directory_before_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "lesson.pdf"
+            _create_pdf(source).close()
+            with (
+                patch.object(pdf_translator, "_create_nllb_translator") as factory,
+                self.assertRaisesRegex(ValueError, "Output folder does not exist"),
+            ):
+                pdf_translator.translate_pdf(source, "en", "de", output_dir=Path(temp_dir) / "missing")
+            factory.assert_not_called()
 
     def test_translates_multipage_pdf_with_one_model_and_ordered_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

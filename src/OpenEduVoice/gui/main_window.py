@@ -1,8 +1,8 @@
 """
 main_window.py
 
-Tkinter-based GUI for the Audio PowerPoint Automation Tool.
-Supports extraction, translation, transcription, TTS, and reintegration.
+Tkinter-based GUI for the OpenEduVoice Translation Tool.
+Supports PDF and PPTX translation with audio extraction, transcription, and TTS.
 """
 
 from __future__ import annotations
@@ -37,19 +37,26 @@ from OpenEduVoice.config.constants import (
 
 class App:
     """
-    GUI Controller for the Audio PowerPoint Automation Tool.
+    GUI Controller for the OpenEduVoice Translation Tool.
+    Supports both PDF and PPTX workflows with mode selection.
     """
 
     def __init__(self, root):
         self.root = root
-        self.root.title("OpenEduVoice - PowerPoint and PDF Translation")
-        self.root.geometry("700x800")
+        self.root.title("OpenEduVoice - Document Translation Tool")
+        width = min(900, max(640, self.root.winfo_screenwidth() - 80))
+        height = min(800, max(520, self.root.winfo_screenheight() - 100))
+        self.root.geometry(f"{width}x{height}")
+        self.root.minsize(640, 520)
 
         self.pptx_path = tk.StringVar()
         self.pdf_path = tk.StringVar()
+        self.pptx_output_dir = tk.StringVar()
+        self.pdf_output_dir = tk.StringVar()
         self.language = tk.StringVar(value="English")
         self.translation_direction = tk.StringVar(value="German to English")
         self.acknowledge_var = tk.BooleanVar(value=False)
+        self.current_mode = tk.StringVar(value="pptx")
 
         self.language_model_map = TTS_LANGUAGE_MODEL_MAP.copy()
 
@@ -120,9 +127,15 @@ class App:
     # ====== Helpers ======
 
     def get_base_path(self) -> Path:
-        return Path(self.pptx_path.get()).with_name(
-            Path(self.pptx_path.get()).stem + "_transcript"
-        )
+        pptx = Path(self.pptx_path.get())
+        return self.get_output_directory(self.pptx_output_dir, pptx) / f"{pptx.stem}_transcript"
+
+    def get_output_directory(self, output_var: tk.StringVar, source: Path) -> Path:
+        selected = output_var.get().strip()
+        destination = Path(selected) if selected else source.parent
+        if not destination.is_dir():
+            raise ValueError(f"Output folder does not exist or is not a directory: {destination}")
+        return destination
 
     def get_subdir(self, name: str) -> Path:
         """Returns a subdirectory under the base path."""
@@ -151,65 +164,247 @@ class App:
     # ====== UI Layout ======
 
     def setup_ui(self):
+        self.root.configure(bg="#f1f5f9")
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=4)
+        self.root.rowconfigure(3, weight=1)
+
+        header_frame = tk.Frame(self.root, bg="#1e3a5f")
+        header_frame.grid(row=0, column=0, sticky="ew")
+        title_label = tk.Label(
+            header_frame,
+            text="OpenEduVoice - Document Translation",
+            font=("Segoe UI", 16, "bold"),
+            bg="#1e3a5f",
+            fg="white"
+        )
+        title_label.pack(anchor="w", padx=20, pady=(10, 4))
+
+        mode_frame = tk.Frame(header_frame, bg="#1e3a5f")
+        mode_frame.pack(anchor="w", padx=20, pady=(0, 10))
+
+        tk.Label(mode_frame, text="Select mode:", font=("Segoe UI", 10), bg="#1e3a5f", fg="white").pack(side="left", padx=(0, 10))
+
+        pptx_btn = tk.Button(
+            mode_frame,
+            text="PPTX Mode",
+            command=lambda: self.switch_mode("pptx"),
+            font=("Segoe UI", 10, "bold"),
+            bg="#2563a6",
+            fg="white",
+            activebackground="#1d4f85",
+            activeforeground="white",
+            relief="flat",
+            width=12,
+            padx=10,
+            pady=4
+        )
+        pptx_btn.pack(side="left", padx=(0, 6))
+        self.pptx_mode_btn = pptx_btn
+
+        pdf_btn = tk.Button(
+            mode_frame,
+            text="PDF Mode",
+            command=lambda: self.switch_mode("pdf"),
+            font=("Segoe UI", 10, "bold"),
+            bg="#526b86",
+            fg="white",
+            activebackground="#1d4f85",
+            activeforeground="white",
+            relief="flat",
+            width=12,
+            padx=10,
+            pady=4
+        )
+        pdf_btn.pack(side="left")
+        self.pdf_mode_btn = pdf_btn
+
+        content_frame = tk.Frame(self.root, bg="#f1f5f9")
+        content_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(8, 0))
+        content_frame.rowconfigure(0, weight=1)
+        content_frame.columnconfigure(0, weight=1)
+
+        self.pptx_frame = tk.Frame(content_frame, bg="#f1f5f9")
+        self.pdf_frame = tk.Frame(content_frame, bg="#f1f5f9")
+        self.pptx_frame.grid(row=0, column=0, sticky="nsew")
+        self.pdf_frame.grid(row=0, column=0, sticky="nsew")
+
+        # Setup both tabs
+        self.setup_pptx_tab()
+        self.setup_pdf_tab()
+
+        control_frame = tk.Frame(self.root, bg="#e2eaf3")
+        control_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(8, 0))
+        control_frame.columnconfigure(1, weight=1)
+
+        left_btn_frame = tk.Frame(control_frame, bg="#e2eaf3")
+        left_btn_frame.grid(row=0, column=0, padx=10, pady=8)
+
+        tk.Button(
+            left_btn_frame,
+            text="Run Selected Steps",
+            command=self.run_selected_steps,
+            font=("Segoe UI", 11, "bold"),
+            bg="#2563a6",
+            fg="white",
+            activebackground="#1d4f85",
+            activeforeground="white",
+            padx=12,
+            pady=6,
+            relief="flat"
+        ).pack(side="left", padx=5)
+
+        tk.Button(
+            left_btn_frame,
+            text="Exit",
+            command=self.root.quit,
+            font=("Segoe UI", 10),
+            bg="#d4dfe9",
+            fg="#1e3a5f",
+            activebackground="#c4d2e0",
+            activeforeground="#1e3a5f",
+            padx=10,
+            pady=6,
+            relief="flat"
+        ).pack(side="left", padx=5)
+
+        ack_text = (
+            "I understand this software uses AI tools/technology for translation. "
+            "After processing, I will manually verify all generated documents before intended use."
+        )
+
+        acknowledgement = tk.Checkbutton(
+            control_frame,
+            text=ack_text,
+            variable=self.acknowledge_var,
+            font=("Segoe UI", 9),
+            bg="#e2eaf3",
+            fg="#1e293b",
+            wraplength=400,
+            justify="left",
+            anchor="w",
+            activebackground="#e2eaf3",
+            activeforeground="#1e293b",
+            selectcolor="white"
+        )
+        acknowledgement.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=8)
+        acknowledgement.bind(
+            "<Configure>",
+            lambda event: acknowledgement.configure(wraplength=max(100, event.width - 30))
+        )
+
+        # ===== Shared Bottom Section =====
+        self.bottom_frame = tk.Frame(self.root, bg="#f1f5f9")
+        self.bottom_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=(6, 10))
+
+        # Progress section
+        progress_lbl = tk.Label(self.bottom_frame, text="Progress", font=("Segoe UI", 10, "bold"), bg="#f1f5f9", fg="#1e3a5f")
+        progress_lbl.pack(anchor="w", pady=(5, 2))
+
+        self.progress_bar = ttk.Progressbar(self.bottom_frame, orient="horizontal", mode="determinate", length=400)
+        self.progress_bar.pack(fill="x", pady=(0, 10))
+
+        # Tabs for Log and Output
+        output_notebook = ttk.Notebook(self.bottom_frame)
+        output_notebook.pack(fill="both", expand=True, pady=5)
+
+        # Log Tab
+        log_frame = ttk.Frame(output_notebook)
+        output_notebook.add(log_frame, text="Log")
+
+        self.log_text = tk.Text(log_frame, height=5, bg="white", fg="#1e293b", font=("Consolas", 9), wrap="word")
+        log_scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        log_scrollbar.pack(side="right", fill="y")
+        self.log_text.pack(fill="both", expand=True, padx=(5, 0), pady=5)
+        self.log_text.config(yscrollcommand=log_scrollbar.set)
+
+        # Output Summary Tab
+        output_frame = ttk.Frame(output_notebook)
+        output_notebook.add(output_frame, text="Output Summary")
+
+        self.output_text = tk.Text(output_frame, height=5, bg="white", fg="#1e293b", wrap="word", font=("Consolas", 9))
+        output_scrollbar = ttk.Scrollbar(output_frame, command=self.output_text.yview)
+        output_scrollbar.pack(side="right", fill="y")
+        self.output_text.pack(fill="both", expand=True, padx=(5, 0), pady=5)
+        self.output_text.config(yscrollcommand=output_scrollbar.set)
+
+        self.switch_mode("pptx")
+
+    def _create_workflow_area(self, parent):
+        canvas = tk.Canvas(parent, bg="#f1f5f9", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#f1f5f9")
+        window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda event: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.bind(
+            "<Configure>",
+            lambda event: canvas.itemconfigure(window, width=event.width)
+        )
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        return scrollable_frame
+
+    def _add_output_folder_row(self, parent, output_var):
+        tk.Label(parent, text="Save to:", font=("Segoe UI", 10), bg="white").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        tk.Entry(parent, textvariable=output_var, font=("Segoe UI", 10)).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+        tk.Button(
+            parent, text="Browse", command=lambda: self.browse_output_folder(output_var),
+            bg="#2563a6", fg="white", activebackground="#1d4f85",
+            activeforeground="white", relief="flat", padx=10
+        ).grid(row=1, column=2, padx=5, pady=5)
+        tk.Label(parent, text="Leave empty to save beside the source file.", font=("Segoe UI", 9), bg="white", fg="#475569").grid(row=2, column=1, sticky="w", padx=5, pady=(0, 5))
+
+    def setup_pptx_tab(self):
+        """Setup PPTX workflow tab."""
         default_font = ("Segoe UI", 10)
 
+        scrollable_frame = self._create_workflow_area(self.pptx_frame)
+
         # 1. File selection
-        file_frame = tk.LabelFrame(self.root, text="1. Select PowerPoint File", font=default_font)
-        file_frame.pack(fill="x", padx=10, pady=10)
-        tk.Label(file_frame, text="File Path:", font=default_font).grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        file_frame = tk.LabelFrame(scrollable_frame, text="Step 1: Select PowerPoint File", font=("Segoe UI", 11, "bold"), bg="white")
+        file_frame.pack(fill="x", padx=4, pady=4)
+        tk.Label(file_frame, text="File Path:", font=default_font, bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         tk.Entry(file_frame, textvariable=self.pptx_path, font=default_font).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        tk.Button(file_frame, text="Browse", command=self.browse_file).grid(row=0, column=2, padx=5, pady=5)
+        tk.Button(file_frame, text="Browse", command=self.browse_file, bg="#2563a6", fg="white", activebackground="#1d4f85", activeforeground="white", relief="flat", padx=10).grid(row=0, column=2, padx=5, pady=5)
+        self._add_output_folder_row(file_frame, self.pptx_output_dir)
         file_frame.columnconfigure(1, weight=1)
 
-        pdf_frame = tk.LabelFrame(self.root, text="PDF Translation Input", font=default_font)
-        pdf_frame.pack(fill="x", padx=10, pady=5)
-        tk.Label(pdf_frame, text="PDF Path:", font=default_font).grid(
-            row=0, column=0, sticky="w", padx=5, pady=5
-        )
-        tk.Entry(pdf_frame, textvariable=self.pdf_path, font=default_font).grid(
-            row=0, column=1, sticky="ew", padx=5, pady=5
-        )
-        tk.Button(pdf_frame, text="Browse", command=self.browse_pdf_file).grid(
-            row=0, column=2, padx=5, pady=5
-        )
-        pdf_frame.columnconfigure(1, weight=1)
+        # 2. Steps selection
+        step_frame = tk.LabelFrame(scrollable_frame, text="Step 2: Select Workflow Steps", font=("Segoe UI", 11, "bold"), bg="white")
+        step_frame.pack(fill="x", padx=4, pady=4)
 
-        # 2. Steps
-        step_frame = tk.LabelFrame(self.root, text="2. Select Steps to Run", font=default_font)
-        step_frame.pack(fill="x", padx=10, pady=5)
-        for i, (label, method) in enumerate(
-            [
-                ("Extract + Convert Audio", self.extract_and_convert_audio),
-                ("Extract Slide Text (.txt)", self.extract_slide_text_txt),
-                ("Transcribe", self.transcribe_audio),
-                ("Translate Audio Transcripts", self.translate_text),
-                ("Translate Slide Text (.txt)", self.translate_slide_text_txt),
-                ("Translate PDF", self.translate_pdf_document),
-                ("Generate TTS Audio", self.generate_tts),
-                ("Reintegrate Text and Audio (Combined)", self.reintegrate_text_and_audio_combined),
-            ]
-        ):
+        pptx_steps = [
+            ("Extract + Convert Audio", self.extract_and_convert_audio),
+            ("Extract Slide Text (.txt)", self.extract_slide_text_txt),
+            ("Transcribe Audio", self.transcribe_audio),
+            ("Translate Audio Transcripts", self.translate_text),
+            ("Translate Slide Text (.txt)", self.translate_slide_text_txt),
+            ("Generate TTS Audio", self.generate_tts),
+            ("Reintegrate Text and Audio", self.reintegrate_text_and_audio_combined),
+        ]
+
+        for i, (label, method) in enumerate(pptx_steps):
             var = tk.BooleanVar()
-            chk = tk.Checkbutton(step_frame, text=label, variable=var, font=default_font)
-            chk.grid(row=i // 2, column=i % 2, sticky="w", padx=10, pady=2)
+            chk = tk.Checkbutton(step_frame, text=label, variable=var, font=default_font, bg="white")
+            chk.grid(row=i // 2, column=i % 2, sticky="w", padx=10, pady=5)
             self.steps_vars[label] = (var, method)
+        step_frame.columnconfigure(0, weight=1)
+        step_frame.columnconfigure(1, weight=1)
 
-        presets_frame = tk.Frame(step_frame)
-        presets_frame.grid(row=4, column=0, columnspan=2, sticky="w", padx=10, pady=4)
-        tk.Button(
-            presets_frame, text="Select PDF workflow", command=self.select_pdf_workflow
-        ).pack(side="left", padx=(0, 5))
-        tk.Button(
-            presets_frame,
-            text="Select PPTX + audio workflow",
-            command=self.select_pptx_workflow,
-        ).pack(side="left")
+        # Preset buttons
+        preset_frame = tk.Frame(step_frame, bg="white")
+        preset_frame.grid(row=4, column=0, columnspan=2, sticky="w", padx=10, pady=5)
+        tk.Button(preset_frame, text="Quick: Full PPTX Workflow", command=self.select_pptx_workflow, bg="#2563a6", fg="white", activebackground="#1d4f85", activeforeground="white", relief="flat", padx=8, font=("Segoe UI", 9, "bold")).pack(side="left", padx=3)
 
-        # 3. Language & TTS settings
-        lang_frame = tk.LabelFrame(self.root, text="3. Language Settings", font=default_font)
-        lang_frame.pack(fill="x", padx=10, pady=5)
+        # 3. Language settings
+        lang_frame = tk.LabelFrame(scrollable_frame, text="Step 3: Language & Translation", font=("Segoe UI", 11, "bold"), bg="white")
+        lang_frame.pack(fill="x", padx=4, pady=4)
 
-        tk.Label(lang_frame, text="TTS Language:", font=default_font).grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        tk.Label(lang_frame, text="TTS Language:", font=default_font, bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         ttk.Combobox(
             lang_frame,
             textvariable=self.language,
@@ -218,76 +413,108 @@ class App:
             font=default_font,
         ).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
-        tk.Label(lang_frame, text="Translation Direction:", font=default_font).grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        ttk.Combobox(
+        tk.Label(lang_frame, text="Translation Direction:", font=default_font, bg="white").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        dir_combo = ttk.Combobox(
             lang_frame,
             textvariable=self.translation_direction,
-            values=["German to English", "English to German"],
+            values=["English to German", "German to English"],
             state="readonly",
             font=default_font,
-        ).grid(row=1, column=1, sticky="ew", padx=5, pady=5)
-
-        # 4. Control buttons
-        control_frame = tk.Frame(self.root)
-        control_frame.pack(fill="x", padx=10, pady=10)
-
-        tk.Button(
-            control_frame,
-            text="Run Selected Steps",
-            command=self.run_selected_steps,
-            font=default_font,
-        ).pack(side="left", padx=5)
-
-        ack_text = (
-            "I understand this software uses AI tools/technology for translation. "
-            "After processing, I will manually verify all generated documents before intended use."
         )
+        dir_combo.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
 
-        tk.Checkbutton(
-            control_frame,
-            text=ack_text,
-            variable=self.acknowledge_var,
-            font=default_font,
-            wraplength=430,   # keeps it readable next to the button
+        info_label = tk.Label(
+            lang_frame,
+            text="Flow: German → English (translate German docs to English)\n       English → German (translate English docs to German)",
+            font=("Segoe UI", 9),
+            bg="#e2eaf3",
             justify="left",
-        ).pack(side="left", padx=10)
+            wraplength=400
+        )
+        info_label.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
 
-        tk.Button(
-            control_frame,
-            text="Exit",
-            command=self.root.quit,
+        lang_frame.columnconfigure(1, weight=1)
+
+    def setup_pdf_tab(self):
+        """Setup PDF workflow tab."""
+        default_font = ("Segoe UI", 10)
+
+        scrollable_frame = self._create_workflow_area(self.pdf_frame)
+
+        # 1. File selection
+        file_frame = tk.LabelFrame(scrollable_frame, text="Step 1: Select PDF File", font=("Segoe UI", 11, "bold"), bg="white")
+        file_frame.pack(fill="x", padx=4, pady=4)
+        tk.Label(file_frame, text="PDF Path:", font=default_font, bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        tk.Entry(file_frame, textvariable=self.pdf_path, font=default_font).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        tk.Button(file_frame, text="Browse", command=self.browse_pdf_file, bg="#2563a6", fg="white", activebackground="#1d4f85", activeforeground="white", relief="flat", padx=10).grid(row=0, column=2, padx=5, pady=5)
+        self._add_output_folder_row(file_frame, self.pdf_output_dir)
+        file_frame.columnconfigure(1, weight=1)
+
+        # 2. Workflow step
+        step_frame = tk.LabelFrame(scrollable_frame, text="Step 2: Select Workflow", font=("Segoe UI", 11, "bold"), bg="white")
+        step_frame.pack(fill="x", padx=4, pady=4)
+
+        var = tk.BooleanVar()
+        chk = tk.Checkbutton(step_frame, text="Translate PDF", variable=var, font=default_font, bg="white")
+        chk.pack(anchor="w", padx=10, pady=10)
+        self.steps_vars["Translate PDF"] = (var, self.translate_pdf_document)
+
+        preset_frame = tk.Frame(step_frame, bg="white")
+        preset_frame.pack(anchor="w", padx=10, pady=5)
+        tk.Button(preset_frame, text="Quick: Translate PDF", command=self.select_pdf_workflow, bg="#2563a6", fg="white", activebackground="#1d4f85", activeforeground="white", relief="flat", padx=8, font=("Segoe UI", 9, "bold")).pack(side="left")
+
+        # 3. Language settings
+        lang_frame = tk.LabelFrame(scrollable_frame, text="Step 3: Translation Settings", font=("Segoe UI", 11, "bold"), bg="white")
+        lang_frame.pack(fill="x", padx=4, pady=4)
+
+        tk.Label(lang_frame, text="Translation Direction:", font=default_font, bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        dir_combo = ttk.Combobox(
+            lang_frame,
+            textvariable=self.translation_direction,
+            values=["English to German", "German to English"],
+            state="readonly",
             font=default_font,
-        ).pack(side="left", padx=5)
+        )
+        dir_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
 
-        # 5. Progress bar
-        progress_frame = tk.LabelFrame(self.root, text="4. Progress", font=default_font)
-        progress_frame.pack(fill="x", padx=10, pady=5)
-        self.progress_bar = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate")
-        self.progress_bar.pack(fill="x", padx=10, pady=5)
+        info_label = tk.Label(
+            lang_frame,
+            text="Flow: German → English (translate German PDF to English)\n       English → German (translate English PDF to German)",
+            font=("Segoe UI", 9),
+            bg="#e2eaf3",
+            justify="left",
+            wraplength=400
+        )
+        info_label.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
 
-        # 6. Log output
-        log_frame = tk.LabelFrame(self.root, text="5. Log", font=default_font)
-        log_frame.pack(fill="both", expand=False, padx=10, pady=5)
-        self.log_text = tk.Text(log_frame, height=7, bg="#f0f0f0", font=("Courier", 9))
-        self.log_text.pack(fill="x", padx=5, pady=5)
+        lang_frame.columnconfigure(1, weight=1)
 
-        # 7. Output summary
-        output_frame = tk.LabelFrame(self.root, text="6. Output Summary", font=default_font)
-        output_frame.pack(fill="both", expand=False, padx=10, pady=10)
-        self.output_text = tk.Text(output_frame, height=5, bg="#f8f8f8", fg="black", wrap="word", font=("Courier", 9))
-        self.output_text.pack(fill="x", padx=5, pady=5)
+    def switch_mode(self, mode: str):
+        """Switch between PDF and PPTX modes."""
+        self.current_mode.set(mode)
+        if mode == "pptx":
+            self.pptx_frame.tkraise()
+            self.pptx_mode_btn.config(bg="#2563a6", relief="sunken")
+            self.pdf_mode_btn.config(bg="#526b86", relief="flat")
+        else:
+            self.pdf_frame.tkraise()
+            self.pdf_mode_btn.config(bg="#2563a6", relief="sunken")
+            self.pptx_mode_btn.config(bg="#526b86", relief="flat")
 
     # ====== UI Actions ======
 
     def select_pdf_workflow(self):
-        """Select only the PDF translation step; the user still starts the run."""
+        """Select only the PDF translation step."""
         for name, (var, _) in self.steps_vars.items():
             var.set(name == "Translate PDF")
 
     def select_pptx_workflow(self):
-        """Select the existing PPTX text and audio steps."""
+        """Select the full PPTX workflow."""
         for name, (var, _) in self.steps_vars.items():
-            var.set(name != "Translate PDF")
+            if name != "Translate PDF":
+                var.set(True)
+            else:
+                var.set(False)
 
     def browse_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("PowerPoint files", "*.pptx")])
@@ -300,6 +527,12 @@ class App:
         if file_path:
             self.pdf_path.set(file_path)
             self.log_and_output(f"Selected PDF: {file_path}")
+
+    def browse_output_folder(self, output_var: tk.StringVar):
+        folder = filedialog.askdirectory(parent=self.root, title="Choose output folder", mustexist=True)
+        if folder:
+            output_var.set(folder)
+            self.log_and_output(f"Selected output folder: {folder}")
 
     # ====== Run Steps ======
 
@@ -314,6 +547,14 @@ class App:
         selected_steps = [(name, method) for name, (var, method) in self.steps_vars.items() if var.get()]
         if not selected_steps:
             self.log_and_output("[WARN] Select at least one step to run.")
+            return
+        try:
+            if any(name == "Translate PDF" for name, _ in selected_steps):
+                self.get_output_directory(self.pdf_output_dir, Path(self.pdf_path.get()))
+            if any(name != "Translate PDF" for name, _ in selected_steps):
+                self.get_output_directory(self.pptx_output_dir, Path(self.pptx_path.get()))
+        except ValueError as e:
+            self.handle_exception("Output folder", e)
             return
         total = max(1, len(selected_steps))
         self.progress_bar["maximum"] = total
@@ -362,6 +603,7 @@ class App:
                     src,
                     tgt,
                     log_fn=self.log_and_output,
+                    output_dir=self.get_output_directory(self.pdf_output_dir, Path(self.pdf_path.get())),
                 )
                 self.log_and_output(f"Translated PDF saved to: {result.translated_pdf}")
                 self.log_and_output(
@@ -496,7 +738,7 @@ class App:
             try:
                 pptx = Path(self.pptx_path.get())
                 base = self.get_base_path()
-                output = pptx.with_name(pptx.stem + "_final_combined.pptx")
+                output = self.get_output_directory(self.pptx_output_dir, pptx) / f"{pptx.stem}_final_combined.pptx"
 
                 reintegrate_text_and_audio(
                     pptx,

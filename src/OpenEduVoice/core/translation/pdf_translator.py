@@ -55,6 +55,8 @@ def translate_pdf(
     source_lang: str,
     target_lang: str,
     log_fn: Callable[[str], None] = print,
+    *,
+    output_dir: Path | None = None,
 ) -> PDFTranslationResult:
     pdf_path = Path(pdf_path)
     if not pdf_path.is_file() or pdf_path.suffix.lower() != ".pdf":
@@ -64,10 +66,13 @@ def translate_pdf(
     if source_lang == target_lang:
         raise ValueError("The source and target languages must be different.")
 
-    output_dir = pdf_path.with_name(f"{pdf_path.stem}_translation")
-    extracted_dir = output_dir / "extracted_text"
-    translated_dir = output_dir / "translated_text"
-    output_pdf = pdf_path.with_name(f"{pdf_path.stem}_translated.pdf")
+    destination = Path(output_dir) if output_dir is not None else pdf_path.parent
+    if not destination.is_dir():
+        raise ValueError(f"Output folder does not exist or is not a directory: {destination}")
+    text_dir = destination / f"{pdf_path.stem}_translation"
+    extracted_dir = text_dir / "extracted_text"
+    translated_dir = text_dir / "translated_text"
+    output_pdf = destination / f"{pdf_path.stem}_translated.pdf"
 
     with fitz.open(pdf_path) as document:
         if document.is_encrypted:

@@ -137,6 +137,8 @@ see the [PDF setup guide](docs/PDF_TRANSLATION.md).
 ### 3. Utilize GUI to test out the project
 
 1. Select a `.pptx` or `.pdf` file and choose the translation direction.
+   Optionally, use **Save to** to select an existing output folder. Leave it
+   empty to save beside the source file. Each mode has its own folder setting.
 
 2. Use **Select PDF workflow** or **Select PPTX + audio workflow** to choose
    steps, or select individual steps manually. The PPTX preset includes audio
@@ -145,7 +147,8 @@ see the [PDF setup guide](docs/PDF_TRANSLATION.md).
 3. Confirm the AI acknowledgement and select **Run Selected Steps**. Inspect the
    log and review the generated document; layout preservation is approximate.
 
-PowerPoint intermediate output is stored beside the presentation:
+PowerPoint intermediate output is stored in the chosen folder (or beside the
+presentation by default):
 ```
 YourFile_transcript/
 ├── media/                                   # Extracted audio
@@ -156,9 +159,10 @@ YourFile_transcript/
 ├── translated_text_txt/                     # Translated slide paragraphs
 ├── tts_audio/                               # Coqui-regenerated speech
 ```
-The final presentation is saved beside the input as
+The final presentation is saved in the same output folder as
 `{original_name}_final_combined.pptx`. PDF output locations are described in the
-[PDF guide](docs/PDF_TRANSLATION.md).
+[PDF guide](docs/PDF_TRANSLATION.md). Existing outputs with the same names may
+be replaced.
 ---
 
 For GPU setup, see the [NVIDIA GPU guide](docs/NvidiaCuda_Installation.md).

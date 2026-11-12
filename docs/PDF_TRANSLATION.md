@@ -13,10 +13,12 @@ exactly.
 
 ## Using the feature
 
-1. Select a PDF in **PDF Translation Input**.
-2. Select the desired direction in **Translation Direction**.
-3. Select **Translate PDF** and run the selected step.
-4. Review the translated PDF and the accompanying per-page text files.
+1. Select **PDF Mode** and browse for a PDF.
+2. Optionally select an existing output folder using **Save to**. Leave it empty
+   to save beside the source PDF.
+3. Select the desired direction in **Translation Direction**.
+4. Select **Translate PDF** and run the selected step.
+5. Review the translated PDF and the accompanying per-page text files.
 
 The Windows installer installs Tesseract and the English (`eng`) and German
 (`deu`) trained data under `tools\tesseract`. The launcher adds it to `PATH`.
@@ -38,8 +40,10 @@ lesson_translation/
     └── ...
 ```
 
-The translated PDF is created beside the input PDF. Text files contain source and
-translated text grouped by page and extracted block.
+The translated PDF and text folder are created in the chosen output folder, or
+beside the input PDF if no folder is selected. Text files contain source and
+translated text grouped by page and extracted block. Existing outputs with the
+same names may be replaced.
 
 ## Processing and implementation
 
