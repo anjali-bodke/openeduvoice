@@ -2,6 +2,8 @@
 
 - [PDF translation](PDF_TRANSLATION.md): supported inputs, output files, OCR setup,
   design decisions, and current limitations.
+- [Markdown translation](MARKDOWN_TRANSLATION.md): usage, output files, structure
+  preservation, and current limitations.
 - [Project guide](PROJECT_GUIDE.md): project goals, architecture, processing flows,
   known risks, and debugging steps.
 - [Developer runbook](RUNBOOK.md): source setup, dependency installation,
