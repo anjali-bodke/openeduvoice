@@ -108,6 +108,53 @@ function Validate-LockFile() {
   Info "Lock file validation OK."
 }
 
+function Ensure-TesseractLocal() {
+  $dir = Join-Path $ToolsDir "tesseract"
+  $exe = Join-Path $dir "tesseract.exe"
+  if (-not (Test-Path $exe)) {
+    if (Test-Path $dir) {
+      throw "Tesseract directory exists but contains no tesseract.exe: $dir. Inspect it before retrying."
+    }
+    $installer = Join-Path $ToolsDir ("tesseract-setup-" + [guid]::NewGuid().ToString("N") + ".exe")
+    $url = "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe"
+    $expected = "bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4"
+    try {
+      Info "Downloading the UB Mannheim Tesseract installer..."
+      New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
+      Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+      if ((Get-FileHash -Algorithm SHA256 $installer).Hash -ne $expected) {
+        throw "Tesseract installer checksum mismatch."
+      }
+      $process = Start-Process -FilePath $installer -ArgumentList @("/S", "/D=$dir") -Wait -PassThru
+      if ($process.ExitCode -ne 0 -or -not (Test-Path $exe)) {
+        throw "Tesseract installation failed (exit code $($process.ExitCode))."
+      }
+    } finally {
+      if (Test-Path $installer) { Remove-Item -Force $installer }
+    }
+  }
+  $data = Join-Path $dir "tessdata"
+  New-Item -ItemType Directory -Force -Path $data | Out-Null
+  foreach ($lang in @("eng", "deu")) {
+    $destination = Join-Path $data "$lang.traineddata"
+    if (-not (Test-Path $destination)) {
+      $temporary = Join-Path $data ("$lang-" + [guid]::NewGuid().ToString("N") + ".tmp")
+      try {
+        Info "Downloading Tesseract $lang language data..."
+        Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/$lang.traineddata" -OutFile $temporary -UseBasicParsing
+        Move-Item $temporary $destination
+      } finally {
+        if (Test-Path $temporary) { Remove-Item -Force $temporary }
+      }
+    }
+  }
+  $languages = & $exe --tessdata-dir $data --list-langs
+  if ($LASTEXITCODE -ne 0 -or $languages -notcontains "eng" -or $languages -notcontains "deu") {
+    throw "Tesseract or its English/German language data failed validation."
+  }
+  Set-OpenEduVoiceEnvironment $RepoRoot
+}
+
 function Ensure-FFmpegLocal() {
   $ffmpegExe  = Join-Path $FfmpegBin "ffmpeg.exe"
   $ffprobeExe = Join-Path $FfmpegBin "ffprobe.exe"
@@ -115,53 +162,6 @@ function Ensure-FFmpegLocal() {
   if ((Test-Path $ffmpegExe) -and (Test-Path $ffprobeExe)) {
     Info "Local FFmpeg already present: $FfmpegBin"
     return
-  }
-
-  function Ensure-TesseractLocal() {
-    $dir = Join-Path $ToolsDir "tesseract"
-    $exe = Join-Path $dir "tesseract.exe"
-    if (-not (Test-Path $exe)) {
-      if (Test-Path $dir) {
-        throw "Tesseract directory exists but contains no tesseract.exe: $dir. Inspect it before retrying."
-      }
-      $installer = Join-Path $ToolsDir ("tesseract-setup-" + [guid]::NewGuid().ToString("N") + ".exe")
-      $url = "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe"
-      $expected = "bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4"
-      try {
-        Info "Downloading the UB Mannheim Tesseract installer..."
-        New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
-        Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-        if ((Get-FileHash -Algorithm SHA256 $installer).Hash -ne $expected) {
-          throw "Tesseract installer checksum mismatch."
-        }
-        $process = Start-Process -FilePath $installer -ArgumentList @("/S", "/D=$dir") -Wait -PassThru
-        if ($process.ExitCode -ne 0 -or -not (Test-Path $exe)) {
-          throw "Tesseract installation failed (exit code $($process.ExitCode))."
-        }
-      } finally {
-        if (Test-Path $installer) { Remove-Item -Force $installer }
-      }
-    }
-    $data = Join-Path $dir "tessdata"
-    New-Item -ItemType Directory -Force -Path $data | Out-Null
-    foreach ($lang in @("eng", "deu")) {
-      $destination = Join-Path $data "$lang.traineddata"
-      if (-not (Test-Path $destination)) {
-        $temporary = Join-Path $data ("$lang-" + [guid]::NewGuid().ToString("N") + ".tmp")
-        try {
-          Info "Downloading Tesseract $lang language data..."
-          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/$lang.traineddata" -OutFile $temporary -UseBasicParsing
-          Move-Item $temporary $destination
-        } finally {
-          if (Test-Path $temporary) { Remove-Item -Force $temporary }
-        }
-      }
-    }
-    $languages = & $exe --tessdata-dir $data --list-langs
-    if ($LASTEXITCODE -ne 0 -or $languages -notcontains "eng" -or $languages -notcontains "deu") {
-      throw "Tesseract or its English/German language data failed validation."
-    }
-    Set-OpenEduVoiceEnvironment $RepoRoot
   }
 
   Warn "Local FFmpeg not found. Downloading and extracting..."
@@ -282,13 +282,13 @@ function Remove-CudaWheels([string]$py) {
 function Install-TorchForMode([string]$py, [string]$mode) {
   if ($mode -eq "cpu") {
     Info "Installing torch/torchaudio (CPU) from official PyTorch index..."
-    & $py -m pip install --upgrade --force-reinstall `
+    & $py -m pip install --upgrade `
       "torch==$TorchVersion" "torchaudio==$TorchVersion" `
       --index-url $TorchIndexCPU
       if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }
   } else {
     Info "Installing torch/torchaudio (CUDA) from official PyTorch cu126 index..."
-    & $py -m pip install --upgrade --force-reinstall `
+    & $py -m pip install --upgrade `
       "torch==$TorchVersion" "torchaudio==$TorchVersion" `
       --index-url $TorchIndexCUDA
       if ($LASTEXITCODE -ne 0) { throw "pip failed (exit code $LASTEXITCODE)" }

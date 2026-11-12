@@ -31,7 +31,10 @@ The installer creates the `venv` virtual environment, installs the locked Python
 dependencies and project, installs local FFmpeg and Tesseract, and downloads the
 default translation, transcription, and speech models. This needs several
 gigabytes of disk space and an internet connection. CPU mode is the simplest
-option for a developer check:
+option for a developer check. See the [default model list](../README.md#default-models)
+for model names and hardware-dependent selection.
+
+Install in CPU mode:
 
 ```powershell
 .\scripts\install_OpenEduVoice.bat cpu

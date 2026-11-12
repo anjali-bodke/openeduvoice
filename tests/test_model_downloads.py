@@ -17,6 +17,16 @@ def module(name, **attributes):
 
 
 class ModelDownloadTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("TTS"), "Coqui TTS is not installed")
+    def test_configured_speech_models_exist_in_coqui_registry(self):
+        from TTS.api import TTS
+        from OpenEduVoice.config.constants import TTS_LANGUAGE_MODEL_MAP
+
+        available_models = TTS().list_models()
+        for language, model in TTS_LANGUAGE_MODEL_MAP.items():
+            with self.subTest(language=language):
+                self.assertIn(model, available_models)
+
     def test_downloads_selected_models_and_speech_vocoders(self):
         whisper = Mock()
         snapshot = Mock()

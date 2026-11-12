@@ -3,7 +3,7 @@
 # ---- TTS / audio synthesis ----
 TTS_LANGUAGE_MODEL_MAP = {
     "English": "tts_models/en/ljspeech/fast_pitch",
-    "German": "tts_models/de/thorsten/fast_pitch",
+    "German": "tts_models/de/thorsten/vits",
 }
 TTS_BITRATE = "192k"
 TTS_CHUNK_PAUSE_MS = 250

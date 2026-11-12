@@ -115,6 +115,65 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("exit code 1", result.stdout)
 
+    def test_tesseract_installer_function_is_available_at_script_scope(self):
+        script = self.root / "scripts" / "install_OpenEduVoice.ps1"
+        script_path = str(script).replace("'", "''")
+        tools_path = str(self.root / "tools").replace("'", "''")
+        command = (
+            "$tokens = $null; $errors = $null; "
+            "$ast = [System.Management.Automation.Language.Parser]::ParseFile("
+            f"'{script_path}', [ref]$tokens, [ref]$errors); "
+            "if ($errors.Count -ne 0) { throw $errors[0] }; "
+            "$functions = @($ast.EndBlock.Statements | Where-Object { "
+            "$_ -is [System.Management.Automation.Language.FunctionDefinitionAst] -and "
+            "$_.Name -eq 'Ensure-TesseractLocal' }); "
+            "if ($functions.Count -ne 1) { throw 'Tesseract function is not at script scope' }; "
+            "Invoke-Expression $functions[0].Extent.Text; "
+            f"$ToolsDir = '{tools_path}'; "
+            "try { Ensure-TesseractLocal; throw 'Expected an incomplete installation error' } "
+            "catch { if ($_.Exception.Message -notlike '*contains no tesseract.exe*') { throw } }; "
+            "exit 0"
+        )
+        tesseract = self.root / "tools" / "tesseract"
+        tesseract.mkdir()
+        try:
+            result = self.run_process([
+                "powershell", "-NoProfile", "-Command", command,
+            ])
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        finally:
+            tesseract.rmdir()
+
+    def test_torch_installer_does_not_force_reinstall_dependencies(self):
+        script = self.root / "scripts" / "install_OpenEduVoice.ps1"
+        script_path = str(script).replace("'", "''")
+        args_path = str(self.root / "pip-args.txt").replace("'", "''")
+        command = (
+            "$tokens = $null; $errors = $null; "
+            "$ast = [System.Management.Automation.Language.Parser]::ParseFile("
+            f"'{script_path}', [ref]$tokens, [ref]$errors); "
+            "if ($errors.Count -ne 0) { throw $errors[0] }; "
+            "$function = $ast.EndBlock.Statements | Where-Object { "
+            "$_ -is [System.Management.Automation.Language.FunctionDefinitionAst] -and "
+            "$_.Name -eq 'Install-TorchForMode' } | Select-Object -First 1; "
+            "if (-not $function) { throw 'Torch installer function is missing' }; "
+            "Invoke-Expression $function.Extent.Text; "
+            "$TorchVersion = '2.10.0'; "
+            "$TorchIndexCPU = 'https://download.pytorch.org/whl/cpu'; "
+            "$TorchIndexCUDA = 'https://download.pytorch.org/whl/cu126'; "
+            "function global:Record-PipArgs { "
+            f"Set-Content -Path '{args_path}' -Value ($args -join '|') "
+            "}; "
+            "$global:LASTEXITCODE = 0; "
+            "Install-TorchForMode 'Record-PipArgs' 'cpu'; "
+            "exit 0"
+        )
+        result = self.run_process(["powershell", "-NoProfile", "-Command", command])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        pip_args = (self.root / "pip-args.txt").read_text(encoding="utf-8-sig").split("|")
+        self.assertIn("--upgrade", pip_args)
+        self.assertNotIn("--force-reinstall", pip_args)
+
     def test_installer_preserves_existing_venv_when_mode_changes(self):
         marker = self.root / "venv" / ".openeduvoice_mode.txt"
         marker.write_text("cpu", encoding="utf-8")

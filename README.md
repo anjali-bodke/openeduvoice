@@ -21,6 +21,21 @@ First-time installation downloads dependencies and the default models. Processin
 can run offline after setup succeeds; selecting a different model may require a
 further download.
 
+### Default models
+
+The Windows installer downloads these models into the project-local `models`
+directory:
+
+| Purpose | Model |
+| --- | --- |
+| Translation | `facebook/nllb-200-distilled-600M` on CPU or GPUs with less than 16 GiB VRAM; `facebook/nllb-200-3.3B` on CUDA GPUs with at least 16 GiB VRAM |
+| Transcription | Faster-Whisper `medium` |
+| English speech | Coqui `tts_models/en/ljspeech/fast_pitch` with `vocoder_models/en/ljspeech/hifigan_v2` |
+| German speech | Coqui `tts_models/de/thorsten/vits` (no separate vocoder) |
+
+Model selection can change with available hardware or an explicitly requested
+model; a different selection may require another download.
+
 ## Documentation
 
 - [PDF translation: setup, decisions, and limitations](docs/PDF_TRANSLATION.md)
