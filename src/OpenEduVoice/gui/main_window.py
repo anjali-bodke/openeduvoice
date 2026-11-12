@@ -2,7 +2,7 @@
 main_window.py
 
 Tkinter-based GUI for the OpenEduVoice Translation Tool.
-Supports PDF and PPTX translation with audio extraction, transcription, and TTS.
+Supports PDF, PPTX and Markdown translation with audio extraction, transcription, and TTS.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from OpenEduVoice.core.translation.translator_interface import (
     translate_transcript_files,
     translate_text_files,
 )
+from OpenEduVoice.core.translation.markdown_translator import translate_markdown
 from OpenEduVoice.core.translation.pdf_translator import translate_pdf
 from OpenEduVoice.core.audio.tts_generator import text_to_speech
 from OpenEduVoice.core.audio.audio_converter import convert_audio_to_wav
@@ -35,10 +36,13 @@ from OpenEduVoice.config.constants import (
 )
 
 
+DOCUMENT_STEPS = ("Translate PDF", "Translate Markdown")
+
+
 class App:
     """
     GUI Controller for the OpenEduVoice Translation Tool.
-    Supports both PDF and PPTX workflows with mode selection.
+    Supports PDF, PPTX and Markdown workflows with mode selection.
     """
 
     def __init__(self, root):
@@ -53,6 +57,8 @@ class App:
         self.pdf_path = tk.StringVar()
         self.pptx_output_dir = tk.StringVar()
         self.pdf_output_dir = tk.StringVar()
+        self.markdown_path = tk.StringVar()
+        self.markdown_output_dir = tk.StringVar()
         self.language = tk.StringVar(value="English")
         self.translation_direction = tk.StringVar(value="German to English")
         self.acknowledge_var = tk.BooleanVar(value=False)
@@ -216,8 +222,25 @@ class App:
             padx=10,
             pady=4
         )
-        pdf_btn.pack(side="left")
+        pdf_btn.pack(side="left", padx=(0, 6))
         self.pdf_mode_btn = pdf_btn
+
+        markdown_btn = tk.Button(
+            mode_frame,
+            text="Markdown Mode",
+            command=lambda: self.switch_mode("markdown"),
+            font=("Segoe UI", 10, "bold"),
+            bg="#526b86",
+            fg="white",
+            activebackground="#1d4f85",
+            activeforeground="white",
+            relief="flat",
+            width=14,
+            padx=10,
+            pady=4
+        )
+        markdown_btn.pack(side="left")
+        self.markdown_mode_btn = markdown_btn
 
         content_frame = tk.Frame(self.root, bg="#f1f5f9")
         content_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(8, 0))
@@ -228,10 +251,13 @@ class App:
         self.pdf_frame = tk.Frame(content_frame, bg="#f1f5f9")
         self.pptx_frame.grid(row=0, column=0, sticky="nsew")
         self.pdf_frame.grid(row=0, column=0, sticky="nsew")
+        self.markdown_frame = tk.Frame(content_frame, bg="#f1f5f9")
+        self.markdown_frame.grid(row=0, column=0, sticky="nsew")
 
         # Setup both tabs
         self.setup_pptx_tab()
         self.setup_pdf_tab()
+        self.setup_markdown_tab()
 
         control_frame = tk.Frame(self.root, bg="#e2eaf3")
         control_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(8, 0))
@@ -489,17 +515,79 @@ class App:
 
         lang_frame.columnconfigure(1, weight=1)
 
+    def setup_markdown_tab(self):
+        """Setup Markdown workflow tab."""
+        default_font = ("Segoe UI", 10)
+
+        scrollable_frame = self._create_workflow_area(self.markdown_frame)
+
+        # 1. File selection
+        file_frame = tk.LabelFrame(scrollable_frame, text="Step 1: Select Markdown File", font=("Segoe UI", 11, "bold"), bg="white")
+        file_frame.pack(fill="x", padx=4, pady=4)
+        tk.Label(file_frame, text="Markdown Path:", font=default_font, bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        tk.Entry(file_frame, textvariable=self.markdown_path, font=default_font).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        tk.Button(file_frame, text="Browse", command=self.browse_markdown_file, bg="#2563a6", fg="white", activebackground="#1d4f85", activeforeground="white", relief="flat", padx=10).grid(row=0, column=2, padx=5, pady=5)
+        self._add_output_folder_row(file_frame, self.markdown_output_dir)
+        file_frame.columnconfigure(1, weight=1)
+
+        # 2. Workflow step
+        step_frame = tk.LabelFrame(scrollable_frame, text="Step 2: Select Workflow", font=("Segoe UI", 11, "bold"), bg="white")
+        step_frame.pack(fill="x", padx=4, pady=4)
+
+        var = tk.BooleanVar()
+        chk = tk.Checkbutton(step_frame, text="Translate Markdown", variable=var, font=default_font, bg="white")
+        chk.pack(anchor="w", padx=10, pady=10)
+        self.steps_vars["Translate Markdown"] = (var, self.translate_markdown_document)
+
+        preset_frame = tk.Frame(step_frame, bg="white")
+        preset_frame.pack(anchor="w", padx=10, pady=5)
+        tk.Button(preset_frame, text="Quick: Translate Markdown", command=self.select_markdown_workflow, bg="#2563a6", fg="white", activebackground="#1d4f85", activeforeground="white", relief="flat", padx=8, font=("Segoe UI", 9, "bold")).pack(side="left")
+
+        # 3. Language settings
+        lang_frame = tk.LabelFrame(scrollable_frame, text="Step 3: Translation Settings", font=("Segoe UI", 11, "bold"), bg="white")
+        lang_frame.pack(fill="x", padx=4, pady=4)
+
+        tk.Label(lang_frame, text="Translation Direction:", font=default_font, bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        dir_combo = ttk.Combobox(
+            lang_frame,
+            textvariable=self.translation_direction,
+            values=["English to German", "German to English"],
+            state="readonly",
+            font=default_font,
+        )
+        dir_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+
+        info_label = tk.Label(
+            lang_frame,
+            text="Flow: German → English (translate German Markdown to English)\n       English → German (translate English Markdown to German)",
+            font=("Segoe UI", 9),
+            bg="#e2eaf3",
+            justify="left",
+            wraplength=400
+        )
+        info_label.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+
+        lang_frame.columnconfigure(1, weight=1)
+
     def switch_mode(self, mode: str):
-        """Switch between PDF and PPTX modes."""
+        """Switch between PPTX, PDF and Markdown modes."""
         self.current_mode.set(mode)
-        if mode == "pptx":
-            self.pptx_frame.tkraise()
-            self.pptx_mode_btn.config(bg="#2563a6", relief="sunken")
-            self.pdf_mode_btn.config(bg="#526b86", relief="flat")
-        else:
-            self.pdf_frame.tkraise()
-            self.pdf_mode_btn.config(bg="#2563a6", relief="sunken")
-            self.pptx_mode_btn.config(bg="#526b86", relief="flat")
+        frames = {
+            "pptx": self.pptx_frame,
+            "pdf": self.pdf_frame,
+            "markdown": self.markdown_frame,
+        }
+        buttons = {
+            "pptx": self.pptx_mode_btn,
+            "pdf": self.pdf_mode_btn,
+            "markdown": self.markdown_mode_btn,
+        }
+        frames[mode].tkraise()
+        for name, button in buttons.items():
+            if name == mode:
+                button.config(bg="#2563a6", relief="sunken")
+            else:
+                button.config(bg="#526b86", relief="flat")
 
     # ====== UI Actions ======
 
@@ -508,10 +596,15 @@ class App:
         for name, (var, _) in self.steps_vars.items():
             var.set(name == "Translate PDF")
 
+    def select_markdown_workflow(self):
+        """Select only the Markdown translation step."""
+        for name, (var, _) in self.steps_vars.items():
+            var.set(name == "Translate Markdown")
+
     def select_pptx_workflow(self):
         """Select the full PPTX workflow."""
         for name, (var, _) in self.steps_vars.items():
-            if name != "Translate PDF":
+            if name not in DOCUMENT_STEPS:
                 var.set(True)
             else:
                 var.set(False)
@@ -527,6 +620,14 @@ class App:
         if file_path:
             self.pdf_path.set(file_path)
             self.log_and_output(f"Selected PDF: {file_path}")
+
+    def browse_markdown_file(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Markdown files", "*.md *.markdown")]
+        )
+        if file_path:
+            self.markdown_path.set(file_path)
+            self.log_and_output(f"Selected Markdown: {file_path}")
 
     def browse_output_folder(self, output_var: tk.StringVar):
         folder = filedialog.askdirectory(parent=self.root, title="Choose output folder", mustexist=True)
@@ -551,7 +652,9 @@ class App:
         try:
             if any(name == "Translate PDF" for name, _ in selected_steps):
                 self.get_output_directory(self.pdf_output_dir, Path(self.pdf_path.get()))
-            if any(name != "Translate PDF" for name, _ in selected_steps):
+            if any(name == "Translate Markdown" for name, _ in selected_steps):
+                self.get_output_directory(self.markdown_output_dir, Path(self.markdown_path.get()))
+            if any(name not in DOCUMENT_STEPS for name, _ in selected_steps):
                 self.get_output_directory(self.pptx_output_dir, Path(self.pptx_path.get()))
         except ValueError as e:
             self.handle_exception("Output folder", e)
@@ -613,6 +716,31 @@ class App:
                 self.increment_progress()
             except Exception as e:
                 self.handle_exception("Translate PDF", e)
+            else:
+                if on_complete:
+                    self.root.after(0, on_complete)
+
+        self._run_task(task)
+
+    def translate_markdown_document(self, on_complete=None):
+        def task():
+            try:
+                src, tgt = self.get_translation_languages()
+                result = translate_markdown(
+                    Path(self.markdown_path.get()),
+                    src,
+                    tgt,
+                    log_fn=self.log_and_output,
+                    output_dir=self.get_output_directory(self.markdown_output_dir, Path(self.markdown_path.get())),
+                )
+                self.log_and_output(f"Translated Markdown saved to: {result.translated_markdown}")
+                self.log_and_output(
+                    f"Extracted and translated Markdown text saved to: "
+                    f"{result.extracted_text_files[0].parent.parent}"
+                )
+                self.increment_progress()
+            except Exception as e:
+                self.handle_exception("Translate Markdown", e)
             else:
                 if on_complete:
                     self.root.after(0, on_complete)
