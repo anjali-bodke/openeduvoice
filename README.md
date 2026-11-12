@@ -6,7 +6,8 @@
 
 An **offline Windows desktop application** for translating educational documents.
 Its PowerPoint workflow handles embedded audio and slide text; its PDF workflow
-translates digital and scanned documents.
+translates digital and scanned documents, and Markdown mode translates `.md` and
+`.markdown` files while preserving common Markdown structure.
 
 ---
 
@@ -16,6 +17,7 @@ The **OpenEduVoice** supports:
 
 - PowerPoint audio extraction, transcription, translation, text-to-speech, and reintegration
 - German-English translation of digital and scanned PDFs
+- German-English Markdown translation with code and link targets preserved
 
 First-time installation downloads dependencies and the default models. Processing
 can run offline after setup succeeds; selecting a different model may require a
@@ -39,6 +41,7 @@ model; a different selection may require another download.
 ## Documentation
 
 - [PDF translation: setup, decisions, and limitations](docs/PDF_TRANSLATION.md)
+- [Markdown translation: usage, outputs, and limitations](docs/MARKDOWN_TRANSLATION.md)
 - [Project idea, technical walkthrough, known risks, and debugging](docs/PROJECT_GUIDE.md)
 - [Developer runbook: source setup, dependency installation, checks, and launch](docs/RUNBOOK.md)
 - [NVIDIA GPU setup](docs/NvidiaCuda_Installation.md)
@@ -51,9 +54,10 @@ model; a different selection may require another download.
 - Windows GUI application (Tkinter)
 - Step-by-step processing pipeline
 - Offline transcription, translation, and TTS
+- Markdown translation with code blocks and link destinations preserved
 - Handles large presentations with embedded audio
 - Modular, extensible architecture
-- No cloud services or external APIs
+- No cloud processing or external APIs; internet access is required during setup to download dependencies and models
 
 ---
 

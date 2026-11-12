@@ -17,7 +17,6 @@ Notes:
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from typing import Callable, Optional
 
 import torch
@@ -29,14 +28,6 @@ from OpenEduVoice.utils.preprocessing import split_text_by_sentences
 # Good default for most laptops. Users with larger GPUs can override via config/UI.
 DEFAULT_MODEL_SMALL = "facebook/nllb-200-distilled-600M"
 DEFAULT_MODEL_LARGE = "facebook/nllb-200-3.3B"
-
-
-@dataclass(frozen=True)
-class NLLBConfig:
-    source_lang: str = "deu_Latn"
-    target_lang: str = "eng_Latn"
-    model_name: Optional[str] = None  # None => auto-select
-    max_chars: int = 400
 
 
 def _cuda_total_gib() -> float:

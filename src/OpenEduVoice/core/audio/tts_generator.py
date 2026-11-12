@@ -26,17 +26,9 @@ from OpenEduVoice.utils.preprocessing import (
 from OpenEduVoice.utils.ffmpeg_utils import (
     apply_atempo,
     probe_duration_seconds,
-    FFmpegNotFound,  # ensure this exists in ffmpeg_utils
+    FFmpegNotFound,
 )
-
-
-
-def _safe_log(log: Callable[[str], None], msg: str) -> None:
-    try:
-        log(msg)
-    except Exception:
-        # never allow logging to crash pipeline
-        pass
+from OpenEduVoice.utils.logging_utils import safe_log as _safe_log
 
 
 def _choose_tempo_to_match(
@@ -99,7 +91,6 @@ def _find_original_audio(stem: str, original_audio_dir: Optional[Path]) -> Optio
 def text_to_speech(
     text_dir: Path,
     output_dir: Path,
-    source_lang: str,
     target_lang: str,
     model_map: Dict[str, str],
     log: Callable[[str], None] = print,
@@ -119,7 +110,6 @@ def text_to_speech(
     Optionally matches durations to original audio by dynamically choosing tempo.
 
     Args:
-        source_lang (str): Reserved for future multilingual TTS support.
         target_lang (str): "en" → English model map key; else "German".
         bitrate (str): AAC bitrate for final m4a.
         original_audio_dir (Path): Directory containing original audio files with same stem (e.g., media1.m4a).
@@ -130,6 +120,14 @@ def text_to_speech(
     Returns:
         List[Path]: Paths to generated .m4a files.
     """
+
+    if not text_dir.is_dir():
+        raise ValueError(f"TTS text input directory does not exist: {text_dir}")
+
+    text_files = sorted(text_dir.glob("*.txt"))
+    if not text_files:
+        _safe_log(log, f"[INFO] No text files found in: {text_dir}")
+        return []
 
     try:
         from TTS.api import TTS  # lazy import
@@ -155,7 +153,7 @@ def text_to_speech(
 
     audio_files: List[Path] = []
 
-    for text_file in sorted(text_dir.glob("*.txt")):
+    for text_file in text_files:
         try:
             raw_text = text_file.read_text(encoding="utf-8")
             cleaned = minimal_clean(raw_text)
@@ -168,6 +166,8 @@ def text_to_speech(
 
             # Chunk by punctuation (existing utility)
             chunks = split_by_punctuation(safe)
+            if not chunks:
+                raise ValueError("Text file is empty after cleanup.")
 
             combined = AudioSegment.silent(duration=0)
             pause = AudioSegment.silent(duration=TTS_CHUNK_PAUSE_MS)
@@ -234,8 +234,9 @@ def text_to_speech(
             audio_files.append(m4a_path)
             _safe_log(log, f"[INFO] Generated TTS: {m4a_path.name} from {len(chunks)} chunks")
 
-        except Exception as e:
-            _safe_log(log, f"[ERROR] Failed TTS for {text_file.name}: {e}")
+        except Exception as exc:
+            _safe_log(log, f"[ERROR] Failed TTS for {text_file.name}: {exc}")
+            raise RuntimeError(f"Failed TTS for {text_file.name}: {exc}") from exc
 
     if output:
         try:

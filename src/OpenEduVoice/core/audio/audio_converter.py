@@ -31,6 +31,9 @@ def convert_audio_to_wav(
     Returns:
         List of converted .wav file paths.
     """
+    if not input_dir.is_dir():
+        raise ValueError(f"Audio input directory does not exist: {input_dir}")
+
     output_dir.mkdir(parents=True, exist_ok=True)
     converted_files: List[Path] = []
 
@@ -46,8 +49,9 @@ def convert_audio_to_wav(
             audio.export(wav_path, format="wav")  # default PCM 16-bit
             converted_files.append(wav_path)
             safe_log(log_fn, f"[INFO] Converted: {file_path.name} -> {wav_path.name}")
-        except Exception as e:
-            safe_log(log_fn, f"[ERROR] Failed to convert {file_path.name}: {e}")
+        except Exception as exc:
+            safe_log(log_fn, f"[ERROR] Failed to convert {file_path.name}: {exc}")
+            raise RuntimeError(f"Failed to convert {file_path.name}: {exc}") from exc
 
     safe_log(log_fn, f"[INFO] Total converted to WAV: {len(converted_files)}")
     return converted_files

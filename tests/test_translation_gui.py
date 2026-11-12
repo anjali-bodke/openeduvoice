@@ -28,12 +28,18 @@ class TranslationGuiTests(unittest.TestCase):
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
         sys.modules.pop("OpenEduVoice.gui.main_window", None)
+        sys.modules.pop("OpenEduVoice.gui.workflow_controller", None)
         self.addCleanup(sys.modules.pop, "OpenEduVoice.gui.main_window", None)
+        self.addCleanup(sys.modules.pop, "OpenEduVoice.gui.workflow_controller", None)
         self.module = importlib.import_module("OpenEduVoice.gui.main_window")
+        self.workflow_module = importlib.import_module(
+            "OpenEduVoice.gui.workflow_controller"
+        )
         self.app = self.module.App.__new__(self.module.App)
+        self.app.workflow_controller = self.workflow_module.WorkflowController(self.app)
         self.app.root = Mock()
         self.app.root.after.side_effect = lambda delay, callback: callback()
-        self.app._run_task = lambda task: task()
+        self.app.workflow_controller._run_task = lambda task: task()
         self.app.pdf_path = Mock()
         self.app.pdf_path.get.return_value = "lesson.pdf"
         self.app.pptx_path = Mock()
@@ -49,7 +55,9 @@ class TranslationGuiTests(unittest.TestCase):
 
     def test_failed_pdf_step_does_not_run_next_step(self):
         callback = Mock()
-        with patch.object(self.module, "translate_pdf", side_effect=ValueError("failed")):
+        with patch.object(
+            self.workflow_module, "translate_pdf", side_effect=ValueError("failed")
+        ):
             self.app.translate_pdf_document(callback)
         callback.assert_not_called()
         self.app.handle_exception.assert_called_once()
@@ -61,7 +69,9 @@ class TranslationGuiTests(unittest.TestCase):
             translated_pdf=Path("translated.pdf"),
             extracted_text_files=[Path("output") / "extracted" / "page.txt"],
         )
-        with patch.object(self.module, "translate_pdf", return_value=result) as translate:
+        with patch.object(
+            self.workflow_module, "translate_pdf", return_value=result
+        ) as translate:
             self.app.translate_pdf_document(callback)
         self.assertEqual(translate.call_args.kwargs["output_dir"], Path("."))
         callback.assert_called_once()
@@ -74,7 +84,9 @@ class TranslationGuiTests(unittest.TestCase):
                 translated_pdf=Path(temp_dir) / "lesson_translated.pdf",
                 extracted_text_files=[Path(temp_dir) / "lesson_translation" / "extracted" / "page.txt"],
             )
-            with patch.object(self.module, "translate_pdf", return_value=result) as translate:
+            with patch.object(
+                self.workflow_module, "translate_pdf", return_value=result
+            ) as translate:
                 self.app.translate_pdf_document()
             translate.assert_called_once_with(
                 Path("lesson.pdf"), "de", "en", log_fn=self.app.log_and_output,
@@ -88,7 +100,9 @@ class TranslationGuiTests(unittest.TestCase):
             destination = Path(temp_dir)
             self.app.pptx_output_dir.get.return_value = temp_dir
             self.assertEqual(self.app.get_base_path(), destination / "lesson_transcript")
-            with patch.object(self.module, "reintegrate_text_and_audio") as reintegrate:
+            with patch.object(
+                self.workflow_module, "reintegrate_text_and_audio"
+            ) as reintegrate:
                 self.app.reintegrate_text_and_audio_combined()
             reintegrate.assert_called_once_with(
                 Path("lesson.pptx"),
@@ -96,7 +110,6 @@ class TranslationGuiTests(unittest.TestCase):
                 destination / "lesson_transcript" / "tts_audio",
                 destination / "lesson_final_combined.pptx",
                 log_fn=self.app.log_and_output,
-                output_fn=self.app.log_and_output,
             )
             self.app.handle_exception.assert_not_called()
 
@@ -119,12 +132,35 @@ class TranslationGuiTests(unittest.TestCase):
                     self.app.steps_vars = {name: (Mock(get=Mock(return_value=True)), step)}
                     self.app.acknowledge_var = Mock(get=Mock(return_value=True))
                     self.app.progress_bar = {}
-                    with patch.object(self.module.tk, "BooleanVar"):
-                        self.app.run_selected_steps()
+                    self.app.run_selected_steps()
                     step.assert_not_called()
                     self.app.handle_exception.assert_called_once()
                     self.app.handle_exception.reset_mock()
                     output_var.get.return_value = ""
+
+    def test_selected_steps_run_in_order(self):
+        first_step = Mock()
+        second_step = Mock()
+        self.app.acknowledge_var = Mock(get=Mock(return_value=True))
+        self.app.steps_vars = {
+            "First": (Mock(get=Mock(return_value=True)), first_step),
+            "Second": (Mock(get=Mock(return_value=True)), second_step),
+        }
+        self.app.progress_bar = {}
+        self.app.pptx_path = Mock(get=Mock(return_value="lesson.pptx"))
+        self.app.pptx_output_dir = Mock(get=Mock(return_value=""))
+        self.app.get_output_directory = Mock(return_value=Path("."))
+        self.app.ui_progress = Mock()
+        self.app.done = Mock()
+
+        self.app.run_selected_steps()
+
+        first_step.assert_called_once()
+        second_step.assert_not_called()
+        first_step.call_args.args[0]()
+        second_step.assert_called_once()
+        second_step.call_args.args[0]()
+        self.app.done.assert_called_once_with("All selected steps completed.")
 
     def test_workflow_presets_only_change_step_selection(self):
         pdf, text, audio = Mock(), Mock(), Mock()
@@ -158,6 +194,7 @@ class TranslationGuiTests(unittest.TestCase):
         for mode, button, frame in (
             ("pdf", app.pdf_mode_btn, app.pdf_frame),
             ("pptx", app.pptx_mode_btn, app.pptx_frame),
+            ("markdown", app.markdown_mode_btn, app.markdown_frame),
         ):
             button.invoke()
             root.update()

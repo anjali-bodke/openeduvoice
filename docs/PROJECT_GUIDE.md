@@ -31,15 +31,17 @@ is supported but may be slow.
 
 The selected-step runner calls one workflow at a time and advances using each
 workflow's success callback. An exception raised by a step is logged and stops the
-selected sequence. Some older audio functions handle errors internally, so check
-the logs and generated files even if the sequence finishes.
+selected sequence. Audio conversion, transcription, and TTS file failures raise
+instead of allowing the sequence to report success; optional tempo-matching
+failures remain warnings and keep the unmodified synthesized audio.
 
-For a quick test, use **Select PDF workflow** or **Select PPTX + audio workflow**,
-choose the corresponding input and language direction, acknowledge the AI
-disclaimer, and select **Run Selected Steps**. Presets only select checkboxes;
-they do not start processing. The PPTX preset includes audio extraction,
-transcription, translation, and TTS: it is intended for presentations with
-embedded audio. Users can change the selected steps before running.
+For a quick test, use **Select PDF workflow**, **Select Markdown workflow**, or
+**Select PPTX + audio workflow**, choose the corresponding input and language
+direction, acknowledge the AI disclaimer, and select **Run Selected Steps**.
+Presets only select checkboxes; they do not start processing. The PPTX preset
+includes audio extraction, transcription, translation, and TTS: it is intended
+for presentations with embedded audio. Users can change the selected steps
+before running.
 
 ### PowerPoint workflow
 
@@ -92,6 +94,16 @@ directory.
 PDF processing decisions, outputs, prerequisites, limitations, and focused
 troubleshooting steps are documented in [PDF translation](PDF_TRANSLATION.md).
 
+### Markdown workflow
+
+The Markdown workflow uses
+[`markdown_translator.py`](../src/OpenEduVoice/core/translation/markdown_translator.py)
+and the shared NLLB model. It writes a translated Markdown file and companion
+source/translated text files. It protects common Markdown structure with
+heuristics, not a full parser; review the output for complex syntax. Usage,
+outputs, and limitations are documented in
+[Markdown translation](MARKDOWN_TRANSLATION.md).
+
 ### Shared utilities and setup
 
 - [`preprocessing.py`](../src/OpenEduVoice/utils/preprocessing.py) normalizes and
@@ -117,18 +129,18 @@ troubleshooting steps are documented in [PDF translation](PDF_TRANSLATION.md).
 These are known risks to consider during changes and debugging; some are current
 design limitations rather than confirmed failures in every document.
 
-### Some underlying audio steps can report errors without raising
+### Optional audio tempo matching can fail independently
 
-The GUI stops the selected sequence when a step raises an exception. Some older
-audio functions may log failures and return normally, which the runner cannot
-distinguish from success. Check the first error and verify the outputs, not only
-the final completion message.
+Audio conversion, transcription, and TTS file failures stop the selected
+sequence. Automatic tempo matching is optional: if FFmpeg is unavailable or
+adjustment fails, the warning is logged and the generated audio is kept
+unmodified. Check the logs and inspect generated outputs.
 
-### PPTX input state is independent of PDF input state
+### Document input state is independent between modes
 
-The GUI has separate PPTX and PDF path variables, but shared workflow checkboxes.
-Select only steps appropriate for the selected input. PDF translation does not
-populate or use the PPTX path.
+The GUI has separate PPTX, PDF, and Markdown paths, but shared workflow
+checkboxes. Select only steps appropriate for the selected input; choosing a mode
+does not populate the other input paths.
 
 ### PDF block detection and reading order
 

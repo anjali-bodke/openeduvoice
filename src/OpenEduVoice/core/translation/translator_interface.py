@@ -46,8 +46,6 @@ def _create_translator(source_lang: str, target_lang: str):
 def _norm_lang(code: str) -> str:
     return LANG_MAP.get(code, code)
 
-_BIB_SEP_REGEX = re.compile(r"\s*;\s*")
-
 def _is_bibliography_like(line: str) -> bool:
     """
     Heuristic: bibliography entries often contain multiple semicolon-separated fields,
@@ -76,18 +74,6 @@ def _is_bibliography_like(line: str) -> bool:
         signals += 1
 
     return signals >= 2
-
-
-def _split_bibliography_chunks(line: str) -> List[str]:
-    """
-    Split on semicolons into translator-friendly chunks.
-    Keeps punctuation in the chunk; avoids dangling '17.' fragments.
-    """
-    parts = [p.strip() for p in _BIB_SEP_REGEX.split(line) if p.strip()]
-    # Fallback: if no meaningful semicolon split happened, translate as one chunk
-    return parts if len(parts) >= 2 else [line.strip()]
-
-
 
 def translate_text_files(
     input_dir: Path,
