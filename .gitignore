@@ -33,6 +33,12 @@ temp/
 output/
 cache/
 
+# =========================
+# Documentation / Context
+# =========================
+docs/gui_redesign/
+*.context/
+
 # Audio / media artifacts
 *.wav
 *.mp3
